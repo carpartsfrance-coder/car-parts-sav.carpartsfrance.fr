@@ -2547,6 +2547,96 @@ app.delete('/api/admin/orders/:id', authenticateAdmin, ensureAdmin, async (req, 
   }
 });
 
+// Lister les commandes (pagination + filtres de base)
+app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '25', 10)));
+    const skip = (page - 1) * limit;
+    const q = String(req.query.q || '').trim();
+    const provider = String(req.query.provider || '').trim();
+    const status = String(req.query.status || '').trim();
+    const productType = String(req.query.productType || '').trim();
+    const reviewDecision = String(req.query.reviewDecision || '').trim(); // réservé, si présent on ne filtre pas pour l'instant
+    const missingTechRef = String(req.query.missingTechRef || '').trim() === '1';
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+    const sortKeyRaw = String(req.query.sort || 'date');
+    const dirRaw = String(req.query.dir || 'desc');
+
+    const filter = {};
+    if (provider) filter.provider = provider;
+    if (status) filter.status = status;
+    if (productType) filter['meta.productType'] = productType;
+    if (missingTechRef) filter['meta.technicalRefRequired'] = true;
+    if (q) {
+      const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [
+        { number: re },
+        { providerOrderId: re },
+        { 'customer.name': re },
+        { 'customer.email': re }
+      ];
+    }
+    if (from || to) {
+      const range = {};
+      if (from) { const d = new Date(from); if (!isNaN(d.getTime())) range.$gte = d; }
+      if (to) { const d = new Date(to); if (!isNaN(d.getTime())) range.$lte = new Date(new Date(to).getTime() + 24*60*60*1000 - 1); }
+      if (Object.keys(range).length) filter.createdAt = range;
+    }
+
+    // Tri
+    const sort = {};
+    const dir = dirRaw === 'asc' ? 1 : -1;
+    switch (sortKeyRaw) {
+      case 'amount': sort['totals.amount'] = dir; break;
+      case 'number': sort['number'] = dir; break;
+      case 'status': sort['status'] = dir; break;
+      case 'type': sort['meta.productType'] = dir; break;
+      case 'date':
+      default: sort['createdAt'] = dir; break;
+    }
+
+    const total = await Order.countDocuments(filter);
+    const orders = await Order.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Métriques simples pour l'en-tête
+    const [missingRefCount, missingVinCount, awaitingShipCount] = await Promise.all([
+      Order.countDocuments({ 'meta.technicalRefRequired': true }),
+      Order.countDocuments({ $or: [ { 'meta.vinOrPlate': { $exists: false } }, { 'meta.vinOrPlate': '' } ] }),
+      Order.countDocuments({ status: { $in: ['processing','paid','awaiting_transfer'] } })
+    ]);
+    const metrics = {
+      missingTechRef: missingRefCount,
+      missingVin: missingVinCount,
+      awaitingShip: awaitingShipCount
+    };
+
+    return res.json({ success: true, orders, total, page, limit, metrics });
+  } catch (e) {
+    console.error('[orders:list] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Détail d'une commande
+app.get('/api/admin/orders/:id', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const byId = id.match(/^[0-9a-fA-F]{24}$/);
+    const order = byId ? await Order.findById(id) : await Order.findOne({ number: id });
+    if (!order) return res.status(404).json({ success: false, message: 'Commande introuvable' });
+    return res.json({ success: true, order });
+  } catch (e) {
+    console.error('[orders:detail] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Recalculer les références requises (rétroactif) sur toutes les commandes existantes
 app.post('/api/admin/orders/rebuild-technical-refs', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
@@ -3140,8 +3230,107 @@ app.post('/api/webhooks/quotes/:token', async (req, res) => {
   }
 });
 
+// Lister les tickets (pagination + filtres)
+app.get('/api/admin/tickets', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || '50', 10)));
+    const skip = (page - 1) * limit;
+
+    const status = String(req.query.status || '').trim();
+    const partType = String(req.query.partType || '').trim();
+    const ticketNumber = String(req.query.ticketNumber || '').trim();
+    const orderNumber = String(req.query.orderNumber || '').trim();
+    const clientFirstName = String(req.query.clientFirstName || '').trim();
+    const clientName = String(req.query.clientName || '').trim();
+    const dateFrom = String(req.query.dateFrom || '').trim();
+    const dateTo = String(req.query.dateTo || '').trim();
+    const priority = String(req.query.priority || '').trim();
+    const search = String(req.query.search || '').trim();
+    const sort = String(req.query.sort || 'newest').trim(); // oldest|newest|priority_asc|priority_desc
+
+    const filter = {};
+    if (status) filter.currentStatus = status;
+    if (priority) filter.priority = priority;
+    if (partType) filter['partInfo.partType'] = partType;
+    if (ticketNumber) filter.ticketNumber = ticketNumber;
+    if (orderNumber) filter['orderInfo.orderNumber'] = orderNumber;
+    if (clientFirstName) filter['clientInfo.firstName'] = new RegExp(clientFirstName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
+    if (clientName) filter['clientInfo.lastName'] = new RegExp(clientName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
+    if (dateFrom || dateTo) {
+      const range = {};
+      if (dateFrom) { const d = new Date(dateFrom); if (!isNaN(d)) range.$gte = d; }
+      if (dateTo) { const d = new Date(dateTo); if (!isNaN(d)) range.$lte = new Date(new Date(dateTo).getTime() + 24*60*60*1000 - 1); }
+      if (Object.keys(range).length) filter.createdAt = range;
+    }
+    if (search) {
+      const re = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
+      filter.$or = [
+        { ticketNumber: re },
+        { 'clientInfo.firstName': re },
+        { 'clientInfo.lastName': re },
+        { 'clientInfo.email': re },
+        { 'orderInfo.orderNumber': re }
+      ];
+    }
+
+    const sortSpec = (() => {
+      switch (sort) {
+        case 'oldest': return { createdAt: 1 };
+        case 'priority_asc': return { priority: 1, createdAt: -1 };
+        case 'priority_desc': return { priority: -1, createdAt: -1 };
+        case 'newest':
+        default: return { createdAt: -1 };
+      }
+    })();
+
+    const total = await Ticket.countDocuments(filter);
+    const tickets = await Ticket.find(filter)
+      .sort(sortSpec)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const pages = Math.max(1, Math.ceil(total / limit));
+    return res.json({ success: true, tickets, pagination: { page, limit, pages, total } });
+  } catch (e) {
+    console.error('[tickets:list] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Détail d'un ticket
+app.get('/api/admin/tickets/:ticketId', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const ticketId = String(req.params.ticketId || '').trim();
+    let ticket = null;
+    if (mongoose.Types.ObjectId.isValid(ticketId)) {
+      ticket = await Ticket.findById(ticketId).lean();
+    }
+    if (!ticket && ticketId) {
+      ticket = await Ticket.findOne({ ticketNumber: ticketId }).lean();
+    }
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket non trouvé' });
+    return res.json({ success: true, ticket });
+  } catch (e) {
+    console.error('[tickets:detail] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Tickets en attente de réponse agent (endpoint minimal pour éviter 404)
+app.get('/api/admin/tickets/awaiting-agent-response', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    // Implémentation simple: retourner 0 par défaut pour éviter 404 côté admin.
+    // Une implémentation avancée pourrait s'appuyer sur un journal d'événements ou messages entrants.
+    return res.json({ success: true, count: 0, tickets: [] });
+  } catch (e) {
+    console.error('[tickets:awaiting] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Route pour supprimer un ticket (admin uniquement)
-// ... (rest of the code remains the same)
 app.delete('/api/admin/tickets/:ticketId', authenticateAdmin, async (req, res) => {
   try {
     const ticketId = req.params.ticketId;
