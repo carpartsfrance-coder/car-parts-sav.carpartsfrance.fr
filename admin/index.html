@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration SAV | Car Parts France</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="kanban.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="admin-container">
+        <header class="admin-header">
+            <div class="logo">
+                <h1>Car Parts France</h1>
+                <span>Administration SAV</span>
+            </div>
+            <div class="horizontal-nav">
+                <nav>
+                    <ul>
+                        <li class="active"><a href="#tickets"><i class="fas fa-ticket-alt"></i> Tickets</a></li>
+                        <li><a href="#orders"><i class="fas fa-shopping-cart"></i> Commandes</a></li>
+                        <li><a href="#tasks"><i class="fas fa-tasks"></i> Tâches</a></li>
+                        <li><a href="#docs"><i class="fas fa-book"></i> Documentation</a></li>
+                        <li><a href="#settings"><i class="fas fa-cog"></i> Paramètres</a></li>
+                        <li><a href="/admin/reviews/"><i class="fas fa-star"></i> Avis</a></li>
+                    </ul>
+                </nav>
+            </div>
+            <div class="user-info">
+                <span id="admin-name">Admin</span>
+                <button id="notif-btn" class="btn-notifs" aria-label="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span id="notif-badge" class="notif-badge"></span>
+                </button>
+                <div id="notif-dropdown" class="notif-dropdown" aria-label="Liste des notifications" hidden>
+                    <div class="notif-dropdown-header">
+                        <span>Notifications</span>
+                        <button id="notif-mark-all" class="link-btn" title="Tout marquer comme lu">Tout marquer comme lu</button>
+                    </div>
+                    <div id="notif-list" class="notif-list"></div>
+                    <div id="notif-empty" class="notif-empty" hidden>Aucune notification</div>
+                </div>
+                <button id="logout-btn" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+            </div>
+        </header>
+        
+        <div class="admin-content">
+            
+            <main class="admin-main">
+                <div class="admin-login" id="admin-login">
+                    <div class="login-container">
+                        <h2>Connexion Administration</h2>
+                        <form id="login-form">
+                            <div class="form-group">
+                                <label for="username">Nom d'utilisateur</label>
+                                <input type="text" id="username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Mot de passe</label>
+                                <input type="password" id="password" required>
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn-primary">Se connecter</button>
+                            </div>
+                            <div class="login-error" id="login-error"></div>
+                        </form>
+                        <div class="forgot-block" style="margin-top:10px;">
+                            <a href="#" id="forgot-password-link">Mot de passe oublié ?</a>
+                            <form id="forgot-form" style="display:none; margin-top:10px;">
+                                <div class="form-group">
+                                    <label for="forgot-email">Votre email</label>
+                                    <input type="email" id="forgot-email" required>
+                                </div>
+                                <button type="submit" class="btn-secondary">Recevoir le lien de réinitialisation</button>
+                                <div id="forgot-msg" class="login-error" style="display:none;"></div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="admin-dashboard" id="admin-dashboard" style="display: none;">
+                    <div class="dashboard-layout">
+                        <!-- Volet latéral des filtres (à gauche) -->
+                        <div class="filters-sidebar" id="filters-sidebar">
+                            <div class="filters-sidebar-header">
+                                <h3><i class="fas fa-filter"></i> Filtres</h3>
+                                <button id="toggle-filters-sidebar" class="toggle-filters-btn" title="Réduire les filtres" aria-expanded="true" aria-controls="filters-sidebar">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                            </div>
+
+                            <div class="filters-sidebar-content">
+                                <div class="filter-section">
+                                    <h4 class="filter-section-title"><i class="fas fa-search"></i> Recherche rapide</h4>
+                                    <div class="filter-section-body">
+                                        <div class="search-container">
+                                            <input type="text" id="search-input" placeholder="Recherche globale...">
+                                            <button id="search-btn" aria-label="Rechercher"><i class="fas fa-search"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="filter-container">
+                                    <h3 id="toggle-filters"><i class="fas fa-filter"></i> Options de filtrage <span class="toggle-icon"><i class="fas fa-chevron-down"></i></span></h3>
+                                    <div id="filters-content" class="filters-content">
+                                        <!-- Onglets des filtres -->
+                                        <div class="filter-tabs">
+                                            <button class="filter-tab-btn active" data-tab="basic">Filtres de base</button>
+                                            <button class="filter-tab-btn" data-tab="status">Statut &amp; Type</button>
+                                            <button class="filter-tab-btn" data-tab="client">Client &amp; Commande</button>
+                                            <button class="filter-tab-btn" data-tab="dates">Dates</button>
+                                        </div>
+                                    
+                                    <!-- Contenu des onglets -->
+                                    <div class="filter-tab-content active" id="tab-basic">
+                                        <div class="filter-row">
+                                            <div class="filter-group">
+                                                <label for="status-filter">Statut</label>
+                                                <select id="status-filter">
+                                                    <option value="">Tous les statuts</option>
+                                                    <option value="nouveau">Nouveau</option>
+                                                    <option value="en_analyse">En analyse</option>
+                                                    <option value="info_complementaire">Info complémentaire</option>
+                                                    <option value="validé">Validé</option>
+                                                    <option value="refusé">Refusé</option>
+                                                    <option value="en_cours_traitement">En traitement</option>
+                                                    <option value="expédié">Expédié</option>
+                                                    <option value="clôturé">Clôturé</option>
+                                                </select>
+                                            </div>
+                                            <div class="filter-group">
+                                                <label for="part-filter">Type de pièce</label>
+                                                <select id="part-filter">
+                                                    <option value="">Tous les types</option>
+                                                    <option value="boite_vitesses">Boîte de vitesses</option>
+                                                    <option value="moteur">Moteur</option>
+                                                    <option value="mecatronique">Mécatronique</option>
+                                                    <option value="boite_transfert">Boîte de transfert</option>
+                                                    <option value="pont">Pont</option>
+                                                    <option value="autres">Autres pièces</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="filter-tab-content" id="tab-status">
+                                        <div class="filter-row">
+                                            <div class="filter-group">
+                                                <label for="status-filter-full">Statut</label>
+                                                <select id="status-filter-full">
+                                                    <option value="">Tous les statuts</option>
+                                                    <option value="nouveau">Nouveau</option>
+                                                    <option value="en_analyse">En analyse</option>
+                                                    <option value="info_complementaire">Info complémentaire</option>
+                                                    <option value="validé">Validé</option>
+                                                    <option value="refusé">Refusé</option>
+                                                    <option value="en_cours_traitement">En traitement</option>
+                                                    <option value="expédié">Expédié</option>
+                                                    <option value="clôturé">Clôturé</option>
+                                                </select>
+                                            </div>
+                                            <div class="filter-group">
+                                                <label for="part-filter-full">Type de pièce</label>
+                                                <select id="part-filter-full">
+                                                    <option value="">Tous les types</option>
+                                                    <option value="boite_vitesses">Boîte de vitesses</option>
+                                                    <option value="moteur">Moteur</option>
+                                                    <option value="mecatronique">Mécatronique</option>
+                                                    <option value="boite_transfert">Boîte de transfert</option>
+                                                    <option value="pont">Pont</option>
+                                                    <option value="autres">Autres pièces</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="filter-row">
+                                            <div class="filter-group">
+                                                <label for="priority-filter">Priorité</label>
+                                                <select id="priority-filter">
+                                                    <option value="">Toutes les priorités</option>
+                                                    <option value="urgent">Urgent</option>
+                                                    <option value="élevé">Élevé</option>
+                                                    <option value="moyen">Moyen</option>
+                                                    <option value="faible">Faible</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="filter-row">
+                                             <div class="filter-group">
+                                                 <label class="checkbox-container" title="Afficher uniquement les tickets dont la dernière réponse provient du client et attend une action agent">
+                                                     <input type="checkbox" id="awaiting-agent-filter">
+                                                     <span class="checkmark"></span>
+                                                     Réponse client non traitée
+                                                 </label>
+                                             </div>
+                                         </div>
+                                    </div>
+                                    
+                                    <div class="filter-tab-content" id="tab-client">
+                                        <div class="filter-row">
+                                            <div class="filter-group">
+                                                <label for="ticket-number-filter">N° de ticket</label>
+                                                <input type="text" id="ticket-number-filter" placeholder="Ex: SAV-12345">
+                                            </div>
+                                            <div class="filter-group">
+                                                <label for="order-number-filter">N° de commande</label>
+                                                <input type="text" id="order-number-filter" placeholder="Ex: CMD-12345">
+                                            </div>
+                                        </div>
+                                        <div class="filter-row">
+                                            <div class="filter-group">
+                                                <label for="client-firstname-filter">Prénom client</label>
+                                                <input type="text" id="client-firstname-filter" placeholder="Prénom">
+                                            </div>
+                                            <div class="filter-group">
+                                                <label for="client-name-filter">Nom client</label>
+                                                <input type="text" id="client-name-filter" placeholder="Nom">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="filter-tab-content" id="tab-dates">
+                                        <div class="filter-row">
+                                            <div class="filter-group date-filter">
+                                                <label for="date-from">Date du</label>
+                                                <input type="date" id="date-from">
+                                            </div>
+                                            <div class="filter-group date-filter">
+                                                <label for="date-to">au</label>
+                                                <input type="date" id="date-to">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                </div>
+                            </div>
+                        </div>
+                        <div class="filters-footer-actions" role="group" aria-label="Actions filtres">
+                            <button id="clear-filters" class="btn-secondary"><i class="fas fa-times"></i> Effacer</button>
+                            <button id="apply-filters" class="btn-primary"><i class="fas fa-check"></i> Appliquer</button>
+                        </div>
+                    </div>
+                    <div class="filters-sidebar-overlay" id="filters-sidebar-overlay" hidden></div>
+                    
+                    <!-- Contenu principal (à droite) -->
+                    <div class="dashboard-main-content">
+                        <!-- Stats du dashboard -->
+                        <div class="dashboard-stats">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-ticket-alt"></i></div>
+                            <div class="stat-info">
+                                <h3>Total Tickets 
+                                    <span class="tooltip">
+                                        <i class="fas fa-info-circle info-icon"></i>
+                                        <span class="tooltiptext">Nombre total de tickets SAV créés dans le système, tous statuts confondus.</span>
+                                    </span>
+                                </h3>
+                                <p id="total-tickets">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                            <div class="stat-info">
+                                <h3>En attente 
+                                    <span class="tooltip">
+                                        <i class="fas fa-info-circle info-icon"></i>
+                                        <span class="tooltiptext">Tickets avec le statut 'en attente' qui nécessitent une action ou une décision. Inclut les nouveaux tickets et ceux en cours de traitement.</span>
+                                    </span>
+                                </h3>
+                                <p id="pending-tickets">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                            <div class="stat-info">
+                                <h3>Résolus 
+                                    <span class="tooltip">
+                                        <i class="fas fa-info-circle info-icon"></i>
+                                        <span class="tooltiptext">Tickets marqués comme 'résolus' après traitement complet. Indique les demandes SAV qui ont été traitées avec succès.</span>
+                                    </span>
+                                </h3>
+                                <p id="resolved-tickets">0</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="view-toggle">
+                        <button id="list-view-btn" class="view-btn active"><i class="fas fa-list"></i> Vue Liste</button>
+                        <button id="kanban-view-btn" class="view-btn"><i class="fas fa-columns"></i> Vue Kanban</button>
+                    </div>
+                    
+                    <div class="tickets-list-container" id="list-view">
+                        <h3>Tickets récents</h3>
+                        <div class="quick-filters-bar" id="quick-filters" role="toolbar" aria-label="Filtres rapides">
+                            <input type="hidden" id="sort-order-hidden" value="" />
+                            <button id="qf-awaiting" class="btn-secondary" aria-pressed="false"><i class="fas fa-comment-dots"></i> En attente réponse</button>
+                            <button id="qf-urgent" class="btn-secondary" aria-pressed="false"><i class="fas fa-bolt"></i> Priorité urgente</button>
+                            <span></span>
+                            <button id="qf-priority-asc" class="btn-secondary" aria-pressed="false" title="Trier par priorité croissante"><i class="fas fa-arrow-up-wide-short"></i> Priorité ▲</button>
+                            <button id="qf-priority-desc" class="btn-secondary" aria-pressed="false" title="Trier par priorité décroissante"><i class="fas fa-arrow-down-short-wide"></i> Priorité ▼</button>
+                            <span></span>
+                            <button id="qf-oldest" class="btn-secondary" aria-pressed="false"><i class="fas fa-sort-amount-up"></i> Plus anciens</button>
+                            <button id="qf-newest" class="btn-secondary" aria-pressed="false"><i class="fas fa-sort-amount-down"></i> Plus récents</button>
+                            <button id="qf-reset" class="btn-primary"><i class="fas fa-rotate"></i> Réinitialiser</button>
+                        </div>
+                        <table class="tickets-table">
+                            <thead>
+                                <tr>
+                                    <th>N° Ticket</th>
+                                    <th>Client</th>
+                                    <th>Type de pièce</th>
+                                    <th>Date</th>
+                                    <th>Priorité</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tickets-list">
+                                <!-- Les tickets seront ajoutés ici dynamiquement -->
+                            </tbody>
+                        </table>
+                        
+                        <div class="pagination" id="pagination">
+                            <!-- La pagination sera ajoutée ici dynamiquement -->
+                        </div>
+                    </div>
+                    
+                    <div id="kanban-view" style="display: none;">
+                        <h3>Vue Kanban des tickets</h3>
+                        <div class="kanban-container">
+                            <div class="kanban-board">
+                                <!-- Les colonnes Kanban seront générées dynamiquement -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div> <!-- Fin dashboard-layout -->
+                </div> <!-- Fin admin-dashboard -->
+
+                <!-- Section Commandes (top-level, séparée) -->
+                <div class="admin-orders" id="admin-orders" style="display: none;">
+                    <div class="orders-view">
+                        <div class="orders-header">
+                            <div class="orders-header__title">
+                                <span class="orders-header__icon"><i class="fas fa-shopping-cart"></i></span>
+                                <div>
+                                    <h2>Commandes SAV</h2>
+                                    <p>Suivez le pipeline de vos commandes, des paiements à l'expédition finale.</p>
+                                </div>
+                            </div>
+                            <div class="orders-header__actions">
+                                <button id="orders-create-btn" class="btn-primary"><i class="fas fa-plus"></i> Nouvelle commande brouillon</button>
+                                <button id="orders-refresh-btn" class="btn-secondary" title="Actualiser la liste"><i class="fas fa-rotate"></i></button>
+                                <button id="orders-sync-btn" class="btn-secondary" title="Synchroniser WooCommerce & Mollie"><i class="fas fa-cloud-download-alt"></i></button>
+                                <button id="orders-sync-woo-all-btn" class="btn-secondary" title="Importer toutes les commandes WooCommerce"><i class="fas fa-database"></i></button>
+                                <button id="orders-rebuild-techref-btn" class="btn-secondary" title="Recalculer les références techniques manquantes"><i class="fas fa-wrench"></i></button>
+                                <button id="orders-invite-review-btn" class="btn-secondary" title="Inviter à laisser un avis"><i class="fas fa-star"></i></button>
+                             </div>
+                        </div>
+
+                        <div class="orders-metrics" id="orders-metrics">
+                            <article class="orders-metric-card">
+                                <div class="metric-label">Réf. technique manquante</div>
+                                <div class="metric-value" id="orders-metric-missing-ref">0</div>
+                                <div class="metric-caption">Commandes à compléter</div>
+                            </article>
+                            <article class="orders-metric-card">
+                                <div class="metric-label">VIN / Plaque manquant</div>
+                                <div class="metric-value" id="orders-metric-missing-vin">0</div>
+                                <div class="metric-caption">Infos véhicule absentes</div>
+                            </article>
+                            <article class="orders-metric-card">
+                                <div class="metric-label">En attente d'expédition</div>
+                                <div class="metric-value" id="orders-metric-awaiting-ship">0</div>
+                                <div class="metric-caption">Paiement ok, logistique en cours</div>
+                            </article>
+                            <article class="orders-metric-card">
+                                <div class="metric-label">En attente de paiement</div>
+                                <div class="metric-value" id="orders-metric-awaiting-pay">0</div>
+                                <div class="metric-caption">Paiement ou virement à confirmer</div>
+                            </article>
+                        </div>
+
+                        <div class="orders-toolbar">
+                            <div class="orders-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="orders-search-input" placeholder="Rechercher une commande (numéro, email, SKU, VIN)" autocomplete="off">
+                                <button id="orders-search-clear" class="orders-search__clear" title="Effacer la recherche"><i class="fas fa-times"></i></button>
+                            </div>
+                            <div class="orders-toolbar__filters">
+                                <select id="orders-provider-filter" aria-label="Filtrer par source">
+                                    <option value="">Toutes sources</option>
+                                    <option value="woocommerce">WooCommerce</option>
+                                    <option value="mollie">Mollie</option>
+                                    <option value="bank_transfer">Virement</option>
+                                    <option value="manual">Manuelle</option>
+                                </select>
+                                <select id="orders-status-filter" aria-label="Filtrer par statut">
+                                    <option value="">Tous statuts</option>
+                                    <option value="pending_payment">En attente de paiement</option>
+                                    <option value="awaiting_transfer">En attente de virement</option>
+                                    <option value="pending">En attente</option>
+                                    <option value="on-hold">En pause</option>
+                                    <option value="paid">Payée</option>
+                                    <option value="processing">En traitement</option>
+                                    <option value="fulfilled">Expédiée</option>
+                                    <option value="completed">Terminée</option>
+                                    <option value="cancelled">Annulée</option>
+                                    <option value="failed">Échouée</option>
+                                    <option value="refunded">Remboursée</option>
+                                    <option value="disputed">Litige</option>
+                                    <option value="draft">Brouillon</option>
+                                </select>
+                                <select id="orders-type-filter" aria-label="Filtrer par type de produit">
+                                    <option value="">Tous types</option>
+                                    <option value="mecatronique_tcu">Mécatronique / TCU</option>
+                                    <option value="pont">Pont</option>
+                                    <option value="boite_transfert">Boîte de transfert</option>
+                                    <option value="moteur">Moteur</option>
+                                    <option value="autres">Autres</option>
+                                </select>
+                                <select id="orders-review-filter" aria-label="Filtrer par avis (clics sur invitation)">
+                                    <option value="">Avis (tous)</option>
+                                    <option value="any">A cliqué (Oui/Non)</option>
+                                    <option value="yes">Oui</option>
+                                    <option value="no">Non</option>
+                                    <option value="none">Aucun clic</option>
+                                </select>
+                                <input type="date" id="orders-from" aria-label="Filtrer à partir du" title="Filtrer à partir du">
+                                <input type="date" id="orders-to" aria-label="Filtrer jusqu'au" title="Filtrer jusqu'au">
+                                <select id="orders-sort" aria-label="Trier les commandes">
+                                    <option value="date_desc">Date (récent d'abord)</option>
+                                    <option value="date_asc">Date (ancien d'abord)</option>
+                                    <option value="amount_desc">Montant (desc)</option>
+                                    <option value="amount_asc">Montant (asc)</option>
+                                    <option value="number_desc">Numéro (desc)</option>
+                                    <option value="number_asc">Numéro (asc)</option>
+                                    <option value="status_asc">Statut (A→Z)</option>
+                                    <option value="status_desc">Statut (Z→A)</option>
+                                    <option value="type_asc">Type (A→Z)</option>
+                                    <option value="type_desc">Type (Z→A)</option>
+                                </select>
+                                <label class="orders-checkbox" title="Afficher les commandes où la référence technique est manquante">
+                                    <input type="checkbox" id="orders-missing-techref">
+                                    <span>Réf manquante</span>
+                                </label>
+                                <button id="orders-export-btn" class="btn-secondary" title="Exporter la sélection en CSV"><i class="fas fa-file-export"></i> Export CSV</button>
+                            </div>
+                        </div>
+
+                        <div class="orders-chips" id="orders-status-chips" role="navigation" aria-label="Filtres rapides commande">
+                            <button class="orders-chip" data-status="">Tous</button>
+                            <button class="orders-chip" data-status="pending_payment">En attente paiement</button>
+                            <button class="orders-chip" data-status="processing">En préparation</button>
+                            <button class="orders-chip" data-status="fulfilled">Expédiée</button>
+                            <button class="orders-chip" data-status="cancelled">Annulée</button>
+                        </div>
+
+                        <div class="orders-active-filters" id="orders-active-filters" aria-live="polite"></div>
+
+                        <div class="orders-table-card">
+                            <div class="orders-table-scroll">
+                                <div class="orders-bulk-actions" id="orders-bulk-actions" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
+                                    <span id="orders-bulk-count">0 sélectionnée(s)</span>
+                                    <button id="orders-bulk-delete" class="btn-secondary"><i class="fas fa-trash"></i> Supprimer la sélection</button>
+                                    <button id="orders-bulk-invite" class="btn-secondary"><i class="fas fa-star"></i> Envoyer invitations avis</button>
+                                </div>
+                                <table class="orders-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:36px;text-align:center;"><input type="checkbox" id="orders-select-all" aria-label="Tout sélectionner"></th>
+                                            <th>N° commande</th>
+                                            <th>Chronologie</th>
+                                            <th>Client</th>
+                                            <th>VIN / Plaque</th>
+                                            <th>Source</th>
+                                            <th>Type</th>
+                                            <th>Statut</th>
+                                            <th>Montant</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="orders-list">
+                                        <!-- Lignes commandes injectées ici -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="orders-pagination" id="orders-pagination"></div>
+                        </div>
+
+                        <div id="order-details-panel" class="order-details-panel" aria-hidden="true">
+                            <div class="order-details-panel__inner">
+                                <div class="order-details-panel__header">
+                                    <h3><i class="fas fa-receipt"></i> Détails de la commande</h3>
+                                    <button id="order-details-close" class="btn-secondary" title="Fermer le panneau"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div id="order-details-content" class="order-details-panel__content">
+                                    <!-- Contenu injecté dynamiquement -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Tâches / Todolist -->
+                <div class="admin-tasks" id="admin-tasks" style="display: none;">
+                    <div class="tasks-layout">
+                        <section class="tasks-main">
+                            <header class="tasks-hero">
+                                <div class="tasks-hero__content">
+                                    <div class="tasks-hero__icon"><i class="fas fa-tasks"></i></div>
+                                    <div class="tasks-hero__text">
+                                        <h2>Tâches & rappels SAV</h2>
+                                        <p>Planifie, assigne et clôture les actions de l'équipe sans rien oublier.</p>
+                                        <span id="tasks-last-refresh" class="tasks-hero__meta">Dernière mise à jour : —</span>
+                                    </div>
+                                </div>
+                                <div class="tasks-hero__cta">
+                                    <button id="tasks-create-btn" class="btn-primary">
+                                        <i class="fas fa-plus"></i> Nouvelle tâche
+                                    </button>
+                                    <button id="tasks-refresh-btn" class="btn-secondary" title="Actualiser">
+                                        <i class="fas fa-rotate"></i>
+                                    </button>
+                                </div>
+                            </header>
+
+                            <div class="tasks-tabs" role="tablist">
+                                <button class="tasks-tab-button is-active" id="tasks-tab-btn-tasks" data-tab="tasks" role="tab" aria-controls="tasks-tab-panel-tasks" aria-selected="true">
+                                    <i class="fas fa-check-double"></i> Tâches
+                                </button>
+                                <button class="tasks-tab-button" id="tasks-tab-btn-shipments" data-tab="shipments" role="tab" aria-controls="tasks-tab-panel-shipments" aria-selected="false">
+                                    <i class="fas fa-truck"></i> Expéditions
+                                </button>
+                            </div>
+
+                            <div class="tasks-tab-panel tasks-tab-panel--tasks is-active" id="tasks-tab-panel-tasks" role="tabpanel" aria-labelledby="tasks-tab-btn-tasks">
+                                <div class="tasks-insights" id="tasks-insights">
+                                    <article class="tasks-insight-card">
+                                        <div class="tasks-insight-card__icon todo"><i class="fas fa-list-ul"></i></div>
+                                        <div>
+                                            <h3>Tâches ouvertes</h3>
+                                            <p id="tasks-open-count">0</p>
+                                            <small>À planifier ou à démarrer</small>
+                                        </div>
+                                    </article>
+                                    <article class="tasks-insight-card">
+                                        <div class="tasks-insight-card__icon progress"><i class="fas fa-spinner"></i></div>
+                                        <div>
+                                            <h3>En cours</h3>
+                                            <p id="tasks-progress-count">0</p>
+                                            <small>Suivies par les agents</small>
+                                        </div>
+                                    </article>
+                                    <article class="tasks-insight-card">
+                                        <div class="tasks-insight-card__icon urgent"><i class="fas fa-bolt"></i></div>
+                                        <div>
+                                            <h3>Urgences</h3>
+                                            <p id="tasks-urgent-count">0</p>
+                                            <small>Priorité haute / urgent</small>
+                                        </div>
+                                    </article>
+                                    <article class="tasks-insight-card">
+                                        <div class="tasks-insight-card__icon done"><i class="fas fa-check-circle"></i></div>
+                                        <div>
+                                            <h3>Terminées (30j)</h3>
+                                            <p id="tasks-done-count">0</p>
+                                            <small>Historique récent</small>
+                                        </div>
+                                    </article>
+                                </div>
+
+                                <div class="tasks-toolbar">
+                                    <div class="tasks-search">
+                                        <i class="fas fa-search"></i>
+                                        <input type="text" id="tasks-search-input" placeholder="Rechercher par titre, mot-clé ou agent…" autocomplete="off">
+                                    </div>
+                                    <div class="tasks-toolbar__filters">
+                                        <label class="tasks-filter">
+                                            <span>Statut</span>
+                                            <select id="tasks-status-filter">
+                                                <option value="">Tous</option>
+                                                <option value="todo">À faire</option>
+                                                <option value="in_progress">En cours</option>
+                                                <option value="done">Terminées</option>
+                                            </select>
+                                        </label>
+                                        <label class="tasks-filter">
+                                            <span>Priorité</span>
+                                            <select id="tasks-priority-filter">
+                                                <option value="">Toutes</option>
+                                                <option value="urgent">Urgent</option>
+                                                <option value="high">Haute</option>
+                                                <option value="medium">Moyenne</option>
+                                                <option value="low">Basse</option>
+                                            </select>
+                                        </label>
+                                        <label class="tasks-filter">
+                                            <span>Assignation</span>
+                                            <select id="tasks-assigned-filter">
+                                                <option value="">Tous les agents</option>
+                                                <option value="me">Mes tâches</option>
+                                                <option value="unassigned">Non assignées</option>
+                                            </select>
+                                        </label>
+                                        <button class="btn-secondary tasks-toolbar__clear" id="tasks-clear-filters" title="Réinitialiser les filtres">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="tasks-quick-filters" id="tasks-quickbar" role="group" aria-label="Filtres rapides tâches">
+                                    <button class="tasks-chip active" id="qf-my-urgent" title="Mes urgences" aria-pressed="false" data-filter="urgent"><i class="fas fa-bolt"></i> Mes urgences</button>
+                                    <button class="tasks-chip" id="qf-today" title="À faire aujourd’hui" aria-pressed="false" data-filter="today"><i class="fas fa-sun"></i> Aujourd’hui</button>
+                                    <button class="tasks-chip" id="qf-overdue" title="En retard" aria-pressed="false" data-filter="overdue"><i class="fas fa-clock"></i> En retard</button>
+                                    <button class="tasks-chip" id="qf-unassigned" title="Non assignées" aria-pressed="false" data-filter="unassigned"><i class="fas fa-user-slash"></i> Non assignées</button>
+                                </div>
+                                </div>
+
+                                <div class="tasks-board">
+                                    <div class="tasks-board__table">
+                                        <table class="tasks-table" id="tasks-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width:42px;"></th>
+                                                    <th>Tâche</th>
+                                                    <th>Priorité</th>
+                                                    <th>Assigné à</th>
+                                                    <th>Statut</th>
+                                                    <th>Échéance</th>
+                                                    <th>Créée par</th>
+                                                    <th style="width:82px;">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tasks-list">
+                                                <tr><td colspan="8" class="tasks-empty-state">Chargement…</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="tasks-pagination" id="tasks-pagination"></div>
+                                </div>
+                            </div>
+
+                            <div class="tasks-tab-panel tasks-tab-panel--shipments" id="tasks-tab-panel-shipments" role="tabpanel" aria-labelledby="tasks-tab-btn-shipments" hidden>
+                                <div class="shipments-summary" id="shipments-summary">
+                                    <article class="shipments-card">
+                                        <div class="shipments-card__icon total"><i class="fas fa-truck-loading"></i></div>
+                                        <div>
+                                            <h3>À préparer</h3>
+                                            <p id="shipments-total-count">0</p>
+                                            <small>Commandes en attente d’expédition</small>
+                                        </div>
+                                    </article>
+                                    <article class="shipments-card">
+                                        <div class="shipments-card__icon today"><i class="fas fa-calendar-day"></i></div>
+                                        <div>
+                                            <h3>Pour aujourd’hui</h3>
+                                            <p id="shipments-due-today">0</p>
+                                            <small>Livraison estimée aujourd’hui</small>
+                                        </div>
+                                    </article>
+                                    <article class="shipments-card">
+                                        <div class="shipments-card__icon overdue"><i class="fas fa-exclamation-triangle"></i></div>
+                                        <div>
+                                            <h3>En retard</h3>
+                                            <p id="shipments-overdue">0</p>
+                                            <small>À traiter en priorité</small>
+                                        </div>
+                                    </article>
+                                    <article class="shipments-card">
+                                        <div class="shipments-card__icon planning"><i class="fas fa-question-circle"></i></div>
+                                        <div>
+                                            <h3>Sans date</h3>
+                                            <p id="shipments-no-date">0</p>
+                                            <small>Planifier une estimation</small>
+                                        </div>
+                                    </article>
+                                </div>
+
+                                <div class="shipments-toolbar">
+                                    <div class="shipments-toolbar__info">
+                                        <i class="fas fa-info-circle"></i>
+                                        <div>
+                                            <span id="shipments-filter-label">Toutes les commandes à expédier</span>
+                                            <small id="shipments-last-refresh">Dernière mise à jour : —</small>
+                                        </div>
+                                    </div>
+                                    <div class="shipments-toolbar__actions">
+                                        <button id="shipments-refresh-btn" class="btn-secondary"><i class="fas fa-rotate"></i> Actualiser</button>
+                                    </div>
+                                </div>
+
+                                <div class="shipments-quick-filters" id="shipments-quick-filters" role="group" aria-label="Filtres expédition">
+                                    <button class="shipments-chip is-active" data-filter="all"><i class="fas fa-layer-group"></i> Toutes</button>
+                                    <button class="shipments-chip" data-filter="today"><i class="fas fa-calendar-day"></i> Aujourd’hui</button>
+                                    <button class="shipments-chip" data-filter="overdue"><i class="fas fa-exclamation-triangle"></i> En retard</button>
+                                    <button class="shipments-chip" data-filter="noTracking"><i class="fas fa-barcode"></i> Sans suivi</button>
+                                    <button class="shipments-chip" data-filter="noDate"><i class="fas fa-question-circle"></i> Sans date</button>
+                                </div>
+
+                                <div class="shipments-board">
+                                    <table class="shipments-table" id="shipments-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Commande</th>
+                                                <th>Client</th>
+                                                <th>Statut</th>
+                                                <th>Livraison estimée</th>
+                                                <th>Suivi</th>
+                                                <th>Montant</th>
+                                                <th style="width:120px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="shipments-list">
+                                            <tr><td colspan="7" class="shipments-empty-state"><i class="fas fa-spinner fa-spin"></i> Chargement…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
+
+                        <aside class="tasks-sidepanel" id="tasks-sidepanel">
+                            <div class="tasks-sidepanel__empty" id="tasks-sidepanel-empty">
+                                <i class="fas fa-clipboard-check"></i>
+                                <h3>Sélectionne une tâche</h3>
+                                <p>Retrouve ici les détails, la timeline et les rappels liés.</p>
+                                <button class="btn-primary" id="tasks-sidepanel-create">Créer une tâche</button>
+                            </div>
+                            <div class="tasks-sidepanel__content" id="tasks-sidepanel-content" hidden>
+                                <header class="tasks-sidepanel__header">
+                                    <div>
+                                        <span class="tasks-sidepanel__status" id="tasks-sidepanel-status"></span>
+                                        <h3 id="tasks-sidepanel-title">Titre tâche</h3>
+                                        <p id="tasks-sidepanel-meta"></p>
+                                    </div>
+                                    <button class="btn-secondary" id="tasks-sidepanel-edit"><i class="fas fa-pen"></i></button>
+                                </header>
+                                <section class="tasks-sidepanel__section">
+                                    <h4><i class="fas fa-align-left"></i>Description</h4>
+                                    <p id="tasks-sidepanel-description" class="tasks-sidepanel__muted">Aucune description.</p>
+                                </section>
+                                <section class="tasks-sidepanel__section">
+                                    <h4><i class="fas fa-info-circle"></i>Informations</h4>
+                                    <ul class="tasks-sidepanel__facts">
+                                        <li><span>Priorité</span><strong id="tasks-sidepanel-priority">-</strong></li>
+                                        <li><span>Assigné à</span><strong id="tasks-sidepanel-assigned">-</strong></li>
+                                        <li><span>Créé par</span><strong id="tasks-sidepanel-created-by">-</strong></li>
+                                        <li><span>Créée le</span><strong id="tasks-sidepanel-created-at">-</strong></li>
+                                        <li><span>Échéance</span><strong id="tasks-sidepanel-due">-</strong></li>
+                                    </ul>
+                                </section>
+                                <section class="tasks-sidepanel__section">
+                                    <h4><i class="fas fa-history"></i>Historique</h4>
+                                    <div class="tasks-timeline" id="tasks-sidepanel-timeline">
+                                        <span class="tasks-sidepanel__muted">Aucun événement enregistré.</span>
+                                    </div>
+                                </section>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+                
+                <!-- Section Paramètres - Gestion des utilisateurs SAV -->
+                <div class="admin-settings" id="admin-settings">
+                    <div class="settings-container">
+                        <div class="breadcrumb">
+                            <ul>
+                                <li><a href="#"><i class="fas fa-home"></i> Dashboard</a></li>
+                                <li class="active"><i class="fas fa-cog"></i> Paramètres</li>
+                            </ul>
+                        </div>
+                        <div id="user-management-section">
+                        <h2><i class="fas fa-users-cog"></i> Gestion des utilisateurs SAV</h2>
+                        
+                        <div class="settings-actions">
+                            <button id="add-user-btn" class="btn-primary"><i class="fas fa-user-plus"></i> Ajouter un utilisateur</button>
+                            <button id="refresh-users-btn" class="btn-secondary"><i class="fas fa-rotate"></i> Rafraîchir</button>
+                            <span id="users-feedback" class="help-text"></span>
+                        </div>
+                        
+                        <!-- Liste des utilisateurs -->
+                        <div class="users-list-card">
+                            <table class="tickets-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nom</th>
+                                        <th>Email</th>
+                                        <th>Rôle</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-list">
+                                    <!-- Les utilisateurs seront ajoutés ici dynamiquement -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Formulaire d'ajout / édition d'utilisateur -->
+                        <div class="user-form-card" id="user-form-card">
+                            <h3 id="user-form-title"><i class="fas fa-user-edit"></i> Nouvel utilisateur</h3>
+                            <form id="user-form">
+                                <input type="hidden" id="user-id">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="user-firstName">Prénom</label>
+                                        <input type="text" id="user-firstName" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-lastName">Nom</label>
+                                        <input type="text" id="user-lastName" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-email">Email</label>
+                                        <input type="email" id="user-email" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-role">Rôle</label>
+                                        <select id="user-role" required>
+                                            <option value="agent">Agent</option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-password">Mot de passe</label>
+                                        <input type="password" id="user-password" placeholder="Min. 8 caractères">
+                                        <small class="help-text">Laissez vide pour ne pas modifier le mot de passe lors d'une édition</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="user-password-confirm">Confirmer le mot de passe</label>
+                                        <input type="password" id="user-password-confirm" placeholder="Retapez le mot de passe">
+                                    </div>
+                                    <div class="form-group inline">
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" id="user-isActive" checked>
+                                            <span class="checkmark"></span>
+                                        </label>
+                                        <span>Compte actif</span>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-primary" id="save-user-btn"><i class="fas fa-save"></i> Enregistrer</button>
+                                    <button type="button" class="btn-secondary" id="cancel-user-btn"><i class="fas fa-times"></i> Annuler</button>
+                                </div>
+                                <div id="user-form-error" class="login-error"></div>
+                            </form>
+                        </div>
+                        </div>
+
+                
+
+                        <!-- Modèles de tâches -->
+                        <h2><i class="fas fa-tasks"></i> Modèles de tâches</h2>
+                        <div class="settings-actions">
+                            <button id="tasktpl-refresh-btn" class="btn-secondary"><i class="fas fa-rotate"></i> Rafraîchir</button>
+                            <span id="tasktpl-feedback" class="help-text"></span>
+                        </div>
+                        <div class="templates-list-card">
+                            <div class="od-grid od-grid--2">
+                                <div class="od-card">
+                                    <h3><i class="fas fa-plus"></i> Nouveau modèle</h3>
+                                    <div class="od-grid od-grid--2">
+                                        <div class="od-field">
+                                            <label class="od-label" for="tasktpl-name">Nom du modèle</label>
+                                            <input id="tasktpl-name" type="text" placeholder="Ex: Relance client livraison" />
+                                        </div>
+                                        <div class="od-field">
+                                            <label class="od-label" for="tasktpl-priority">Priorité</label>
+                                            <select id="tasktpl-priority">
+                                                <option value="low">Basse</option>
+                                                <option value="medium" selected>Moyenne</option>
+                                                <option value="high">Haute</option>
+                                                <option value="urgent">Urgent</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="od-field">
+                                        <label class="od-label" for="tasktpl-title">Titre par défaut</label>
+                                        <input id="tasktpl-title" type="text" placeholder="Ex: Relancer le client pour la livraison" />
+                                    </div>
+                                    <div class="od-field">
+                                        <label class="od-label" for="tasktpl-tags">Tags (séparés par des virgules)</label>
+                                        <input id="tasktpl-tags" type="text" placeholder="ex: rappel, client, livraison" />
+                                    </div>
+                                    <div class="od-field">
+                                        <label class="od-label" for="tasktpl-description">Description</label>
+                                        <textarea id="tasktpl-description" rows="3" placeholder="Détaille les étapes ou le contexte…"></textarea>
+                                    </div>
+                                    <div class="od-actions">
+                                        <button id="tasktpl-save-btn" class="btn-primary"><i class="fas fa-save"></i> Enregistrer le modèle</button>
+                                    </div>
+                                </div>
+                                <div class="od-card">
+                                    <h3><i class="fas fa-list-ul"></i> Modèles existants</h3>
+                                    <div class="templates-list-card">
+                                        <table class="tickets-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Nom</th>
+                                                    <th>Titre</th>
+                                                    <th>Priorité</th>
+                                                    <th>Tags</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tasktpl-list">
+                                                <tr><td colspan="5" class="od-empty"><i class="fas fa-info-circle"></i> Aucun modèle</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gestion des modèles de réponse -->
+                        <h2><i class="fas fa-reply"></i> Modèles de réponse</h2>
+                        <div class="settings-actions">
+                            <button id="add-template-btn" class="btn-primary"><i class="fas fa-plus"></i> Ajouter un modèle</button>
+                            <button id="refresh-templates-btn" class="btn-secondary"><i class="fas fa-rotate"></i> Rafraîchir</button>
+                            <span id="templates-feedback" class="help-text"></span>
+                        </div>
+                        <div class="templates-list-card">
+                            <table class="tickets-table">
+                                <thead>
+                                    <tr>
+                                        <th>Libellé</th>
+                                        <th>Clé</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="templates-list">
+                                    <!-- Les modèles seront ajoutés ici dynamiquement -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Formulaire d'ajout / édition de modèle -->
+                        <div class="template-form-card" id="template-form-card">
+                            <h3 id="template-form-title"><i class="fas fa-edit"></i> Nouveau modèle</h3>
+                            <form id="template-form">
+                                <input type="hidden" id="template-id">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="template-key">Clé (unique)</label>
+                                        <input type="text" id="template-key" placeholder="ex: ask_more_info" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="template-label">Libellé</label>
+                                        <input type="text" id="template-label" placeholder="ex: Demande d'informations complémentaires" required>
+                                    </div>
+                                    <div class="form-group" style="grid-column: 1 / -1;">
+                                        <label for="template-content">Contenu</label>
+                                        <textarea id="template-content" rows="6" placeholder="Utilisez des variables: {{client.firstName}}, {{ticket.number}}, {{order.number}}" required></textarea>
+                                        <small class="help-text">Variables supportées: {{client.firstName}}, {{client.lastName}}, {{ticket.number}}, {{order.number}}</small>
+                                    </div>
+                                    <div class="form-group inline">
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" id="template-isActive" checked>
+                                            <span class="checkmark"></span>
+                                        </label>
+                                        <span>Actif</span>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn-primary" id="save-template-btn"><i class="fas fa-save"></i> Enregistrer</button>
+                                    <button type="button" class="btn-secondary" id="cancel-template-btn"><i class="fas fa-times"></i> Annuler</button>
+                                </div>
+                                <div id="template-form-error" class="login-error" style="display:none;"></div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gestion de la documentation (édition admin) -->
+                <div class="docs-admin-card" id="docs-admin-section">
+                    <h2><i class="fas fa-file-alt"></i> Documentation SAV (édition admin)</h2>
+                    <div class="settings-actions">
+                        <button id="refresh-docs-btn" class="btn-secondary"><i class="fas fa-rotate"></i> Rafraîchir</button>
+                        <button id="new-doc-btn" class="btn-secondary"><i class="fas fa-file-circle-plus"></i> Nouveau document</button>
+                        <span id="docs-feedback" class="help-text"></span>
+                    </div>
+                    <div class="docs-editor-grid" style="display:grid; grid-template-columns: 320px 1fr; gap:16px; align-items:start;">
+                        <aside class="docs-files-panel" style="border:1px solid #eee; border-radius:8px; padding:12px; background:#fff;">
+                            <div class="form-group">
+                                <input type="text" id="docs-filter" placeholder="Filtrer les fichiers...">
+                            </div>
+                            <ul id="docs-files" class="docs-files" style="list-style:none; margin:0; padding:0; max-height: 420px; overflow:auto;">
+                                <!-- La liste des fichiers sera injectée ici -->
+                            </ul>
+                            <small class="help-text">Les fichiers sont sous <code>admin/docs/</code></small>
+                        </aside>
+                        <section class="docs-editor-panel" style="border:1px solid #eee; border-radius:8px; padding:12px; background:#fff;">
+                            <div class="form-group">
+                                <label for="docs-current-path">Chemin du fichier (.md)</label>
+                                <input type="text" id="docs-current-path" placeholder="ex: guides/moteurs.md">
+                                <small class="help-text">Uniquement des fichiers <code>.md</code> dans <code>admin/docs/</code></small>
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="docs-editor">Contenu Markdown</label>
+                                <div class="docs-editor-toolbar" aria-label="Outils de mise en forme" style="display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 8px; align-items:center;">
+                                    <div class="toolbar-modes" role="group" aria-label="Mode d'édition" style="display:flex; gap:6px; margin-right:8px;">
+                                        <button type="button" class="btn-light" id="docs-mode-visual" aria-pressed="true"><i class="fas fa-eye"></i> Visuel</button>
+                                        <button type="button" class="btn-light" id="docs-mode-markdown" aria-pressed="false"><i class="fas fa-code"></i> Markdown</button>
+                                    </div>
+                                    <button type="button" class="btn-light" title="Gras" data-md="bold"><i class="fas fa-bold"></i></button>
+                                    <button type="button" class="btn-light" title="Italique" data-md="italic"><i class="fas fa-italic"></i></button>
+                                    <span style="width:1px; background:#eee; margin:0 4px;"></span>
+                                    <button type="button" class="btn-light" title="Titre 1" data-md="h1">H1</button>
+                                    <button type="button" class="btn-light" title="Titre 2" data-md="h2">H2</button>
+                                    <button type="button" class="btn-light" title="Titre 3" data-md="h3">H3</button>
+                                    <span style="width:1px; background:#eee; margin:0 4px;"></span>
+                                    <button type="button" class="btn-light" title="Liste à puces" data-md="ul"><i class="fas fa-list-ul"></i></button>
+                                    <button type="button" class="btn-light" title="Liste numérotée" data-md="ol"><i class="fas fa-list-ol"></i></button>
+                                    <span style="width:1px; background:#eee; margin:0 4px;"></span>
+                                    <button type="button" class="btn-light" title="Lien" data-md="link"><i class="fas fa-link"></i></button>
+                                    <button type="button" class="btn-light" title="Code" data-md="code"><i class="fas fa-code"></i></button>
+                                    <button type="button" class="btn-light" title="Citation" data-md="quote"><i class="fas fa-quote-right"></i></button>
+                                </div>
+                                <div id="docs-editor-wysiwyg" class="markdown-body" contenteditable="true" style="display:block; min-height:220px; border:1px solid #eaeaea; border-radius:8px; padding:12px; background:#fff; overflow:auto;" aria-label="Éditeur visuel (WYSIWYG)"></div>
+                                <textarea id="docs-editor" rows="14" placeholder="# Titre\n\nVotre contenu ici..." style="display:none;"></textarea>
+                            </div>
+                            <div class="form-group inline" style="align-items:center; gap:8px;">
+                                 <label class="checkbox-container">
+                                     <input type="checkbox" id="docs-preview-toggle" checked>
+                                     <span class="checkmark"></span>
+                                 </label>
+                                 <span>Prévisualisation en direct</span>
+                             </div>
+                             <div id="docs-live-preview" class="docs-preview" style="border:1px solid #eee; border-radius:8px; padding:12px; background:#fafafa; max-height: 420px; overflow:auto;">
+                                 <div class="docs-content">
+                                     <article class="markdown-body" id="docs-live-preview-article">
+                                         <p>La prévisualisation s’affichera ici.</p>
+                                     </article>
+                                 </div>
+                             </div>
+                            <div class="form-actions">
+                                <button id="save-doc-btn" class="btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+                                <button id="delete-doc-btn" class="btn-danger"><i class="fas fa-trash"></i> Supprimer</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                
+                <!-- Section Documentation -->
+                <div class="admin-docs" id="admin-docs" style="display: none;">
+                    <div class="settings-container">
+                        <div class="breadcrumb">
+                            <ul>
+                                <li><a href="#"><i class="fas fa-home"></i> Dashboard</a></li>
+                                <li class="active"><i class="fas fa-book"></i> Documentation</li>
+                            </ul>
+                        </div>
+                        <h2><i class="fas fa-book"></i> Aide agents SAV</h2>
+                        <div class="docs-search">
+                            <input type="text" id="docs-search" placeholder="Rechercher dans les documents...">
+                        </div>
+                        <div class="docs-layout">
+                            <aside class="docs-sidebar">
+                                <div id="docs-sidebar-dynamic"><!-- rempli dynamiquement --></div>
+                            </aside>
+                            <section class="docs-content">
+                                <article id="docs-content-article">
+                                    <p>Sélectionnez un document dans le menu de gauche pour l’afficher ici.</p>
+                                </article>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="ticket-details" id="ticket-details">
+                    <div class="breadcrumb">
+                        <ul>
+                            <li><a href="#"><i class="fas fa-home"></i> Dashboard</a></li>
+                            <li><a href="#" id="breadcrumb-tickets">Liste des tickets</a></li>
+                            <li class="active">Détails du ticket <span id="breadcrumb-ticket-number"></span></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="ticket-header">
+                        <div class="ticket-hero">
+                            <div class="ticket-hero__top">
+                                <div class="ticket-hero__nav">
+                                    <button class="btn-back" id="back-to-list"><i class="fas fa-arrow-left"></i> Retour</button>
+                                    <button class="btn-delete" id="delete-ticket-detail"><i class="fas fa-trash"></i> Supprimer</button>
+                                </div>
+                                <h2 class="ticket-hero__title">Détails du ticket <span id="detail-ticket-number"></span></h2>
+                            </div>
+                            <div class="ticket-hero__meta">
+                                <div class="ticket-hero__left">
+                                    <div class="ticket-assign-info">
+                                        <span><strong>Assigné à:</strong> <span id="detail-assigned-to">—</span></span>
+                                        <span id="detail-escalation-badge" class="priority-badge" style="display:none; background:#f59e0b; color:#111827;">Escaladé</span>
+                                    </div>
+                                </div>
+                                <div class="ticket-hero__right">
+                                    <div class="ticket-status-priority">
+                                        <span id="detail-ticket-priority" class="priority-badge"></span>
+                                        <span id="detail-ticket-status" class="ticket-current-status" style="display:none"></span>
+                                        <span id="detail-ticket-current-priority" style="display:none"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ticket-hero__actions">
+                                <div class="ticket-actions" id="ticket-actions">
+                                    <button id="btn-assign-ticket" class="btn-secondary" title="Assigner ce ticket"><i class="fas fa-user-check"></i> Assigner</button>
+                                    <button id="btn-request-assistance" class="btn-secondary" title="Demander de l'assistance interne"><i class="fas fa-life-ring"></i> Demander assistance</button>
+                                    <button id="btn-escalate-ticket" class="btn-danger" title="Escalader ce ticket (administrateur uniquement)"><i class="fas fa-exclamation-triangle"></i> Escalader</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Bloc Informations & Notes (plein largeur au-dessus) -->
+                    <div class="tabs-container">
+                                <div class="tabs-nav">
+                                    <button class="tab-btn active" data-tab="client"><i class="fas fa-user"></i> Client</button>
+                                    <button class="tab-btn" data-tab="vehicle"><i class="fas fa-car"></i> Véhicule</button>
+                                    <button class="tab-btn" data-tab="part"><i class="fas fa-cogs"></i> Pièce & Problème</button>
+                                    <button class="tab-btn" data-tab="documents"><i class="fas fa-file-alt"></i> Documents</button>
+                                    <button class="tab-btn" data-tab="history"><i class="fas fa-history"></i> Historique</button>
+                                </div>
+                                
+                                <div class="tab-content active" id="tab-client">
+                                    <div class="ticket-section section-info">
+                                        <h3>Informations client (lecture seule)</h3>
+                                        <div class="info-grid">
+                                            <div class="info-item">
+                                                <label>Nom</label>
+                                                <p id="detail-client-name"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Email</label>
+                                                <p id="detail-client-email"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Téléphone</label>
+                                                <p id="detail-client-phone"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>N° Commande</label>
+                                                <p id="detail-order-number"></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="tab-content" id="tab-vehicle">
+                                    <div class="ticket-section section-info">
+                                        <h3>Informations véhicule (lecture seule)</h3>
+                                        <div class="info-grid">
+                                            <div class="info-item">
+                                                <label>VIN</label>
+                                                <p id="detail-vehicle-vin"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Date d'installation</label>
+                                                <p id="detail-installation-date"></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="tab-content" id="tab-part">
+                                    <div class="ticket-section section-info">
+                                        <h3>Informations pièce et problème (lecture seule)</h3>
+                                        <div class="info-grid">
+                                            <div class="info-item">
+                                                <label>Type de réclamation</label>
+                                                <p id="detail-claim-type"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Type de pièce</label>
+                                                <p id="detail-part-type"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Symptôme</label>
+                                                <p id="detail-symptom"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Moment de la panne</label>
+                                                <p id="detail-failure-time"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Codes défaut</label>
+                                                <p id="detail-error-codes"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Installation pro</label>
+                                                <p id="detail-pro-installation"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Mise en huile</label>
+                                                <p id="detail-oil-filled"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Quantité huile</label>
+                                                <p id="detail-oil-quantity"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Référence huile</label>
+                                                <p id="detail-oil-reference"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Pièces neuves</label>
+                                                <p id="detail-new-parts"></p>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Détails pièces</label>
+                                                <p id="detail-parts-details"></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="tab-content" id="tab-documents">
+                                    <div class="ticket-section section-info">
+                                        <h3>Documents (lecture seule)</h3>
+                                        <div class="documents-list" id="documents-list">
+                                            <!-- Les documents seront ajoutés ici dynamiquement -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="tab-content" id="tab-history">
+                                    <div class="ticket-section section-info">
+                                        <h3>Historique des statuts (lecture seule)</h3>
+                                        <div class="status-timeline" id="detail-status-timeline">
+                                            <!-- L'historique des statuts sera ajouté ici dynamiquement -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="ticket-section internal-notes">
+                                    <h3>Notes internes <i class="fas fa-info-circle help-icon" title="Réservées à l'équipe interne, jamais visibles par le client"></i></h3>
+                                    <p class="section-description">Ces notes sont uniquement visibles par l'équipe SAV et permettent de partager des informations confidentielles sur le dossier</p>
+                                    <div class="form-group">
+                                        <textarea id="internal-notes" rows="5"></textarea>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button id="save-notes" class="btn-secondary">Enregistrer les notes</button>
+                                    </div>
+                                </div>
+                    </div>
+
+                    <!-- Deux colonnes : Conversation (gauche) + Statut (droite) -->
+                    <div class="split-view">
+                        <div class="conversation-panel">
+                            <div class="panel-header"><i class="fas fa-comments"></i><h3>Conversation du ticket</h3></div>
+                            <div id="conversation-thread" class="conversation-thread" aria-live="polite"></div>
+                        </div>
+                        <div class="status-panel panel panel--status">
+                            <div class="panel-header"><i class="fas fa-clipboard-check"></i><h3>Mettre à jour le statut (actions)</h3></div>
+                            <form id="update-status-form" class="status-update-form">
+                                <div class="status-form-summary">
+                                    <div class="status-summary-item">
+                                        <span class="status-summary-label">Statut actuel</span>
+                                        <span class="status-summary-value" id="visible-current-status"></span>
+                                    </div>
+                                    <div class="status-summary-item">
+                                        <span class="status-summary-label">Priorité actuelle</span>
+                                        <span class="status-summary-value" id="visible-current-priority"></span>
+                                    </div>
+                                    <div class="status-summary-item status-summary-item--muted">
+                                        <span class="status-summary-label">Dernière mise à jour</span>
+                                        <span class="status-summary-value" id="status-last-update">—</span>
+                                    </div>
+                                </div>
+                                <div class="status-form-grid">
+                                    <div class="status-form-card">
+                                        <div class="status-form-card__header">
+                                            <i class="fas fa-arrow-trend-up"></i>
+                                            <div>
+                                                <h4>Statut du ticket</h4>
+                                                <p>Choisissez la prochaine étape visible par le client.</p>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="new-status">Nouveau statut <i class="fas fa-info-circle help-icon" title="Modifie l'état actuel du ticket et déclenche des notifications"></i></label>
+                                            <small class="help-text">Sélectionnez <strong>“Conserver le même statut”</strong> si aucun changement n'est nécessaire.</small>
+                                            <select id="new-status" required>
+                                                <option value="same_status">Conserver le même statut</option>
+                                                <option value="">Sélectionner un statut</option>
+                                                <option value="nouveau">Nouveau</option>
+                                                <option value="en_analyse">En analyse</option>
+                                                <option value="info_complementaire">Informations complémentaires requises</option>
+                                                <option value="validé">Validé</option>
+                                                <option value="refusé">Refusé</option>
+                                                <option value="en_cours_traitement">En cours de traitement</option>
+                                                <option value="expédié">Expédié</option>
+                                                <option value="clôturé">Clôturé</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="status-form-card">
+                                        <div class="status-form-card__header">
+                                            <i class="fas fa-layer-group"></i>
+                                            <div>
+                                                <h4>Priorité & modèle</h4>
+                                                <p>Ajustez l'urgence et préparez votre réponse.</p>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="ticket-priority">Priorité <i class="fas fa-info-circle help-icon" title="Détermine l'urgence du traitement du ticket"></i></label>
+                                            <select id="ticket-priority">
+                                                <option value="">Conserver la priorité actuelle</option>
+                                                <option value="faible">Faible</option>
+                                                <option value="moyen">Moyenne</option>
+                                                <option value="élevé">Élevée</option>
+                                                <option value="urgent">Urgente</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="response-template">Modèle de réponse <i class="fas fa-info-circle help-icon" title="Insère un modèle avec des variables comme le nom du client"></i></label>
+                                            <small class="help-text">Choisissez un modèle pour accélérer votre rédaction. Le texte peut être ajusté ensuite.</small>
+                                            <select id="response-template">
+                                                <option value="">Aucun modèle</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="status-form-card status-form-card--wide">
+                                        <div class="status-form-card__header">
+                                            <i class="fas fa-pen-to-square"></i>
+                                            <div>
+                                                <h4>Communication client</h4>
+                                                <p>Expliquez clairement le changement et joignez des preuves si nécessaire.</p>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="status-comment">Commentaire <i class="fas fa-info-circle help-icon" title="Visible par le client dans le suivi du ticket"></i></label>
+                                            <textarea id="status-comment" rows="4" placeholder="Ex: Nous procédons au remboursement sous 48h..."></textarea>
+                                        </div>
+                                        <div class="status-form-attachments">
+                                            <div class="form-group">
+                                                <label for="comment-attachments">Pièces jointes</label>
+                                                <small class="help-text">Formats acceptés: JPG, PNG, PDF (5 fichiers max)</small>
+                                                <input type="file" id="comment-attachments" accept=".jpg,.jpeg,.png,.pdf" multiple>
+                                            </div>
+                                            <div id="comment-attachments-preview" class="attachments-preview" style="display:none;"></div>
+                                        </div>
+                                        <div class="form-group" id="additional-info-group" style="display: none;">
+                                            <label for="additional-info">Informations complémentaires demandées <i class="fas fa-info-circle help-icon" title="Précisez les documents ou informations nécessaires au client"></i></label>
+                                            <textarea id="additional-info" rows="3" placeholder="Merci de nous transmettre..."></textarea>
+                                        </div>
+                                        <div class="status-form-options">
+                                            <label class="checkbox-container" title="Envoie un email automatique au client pour l'informer du changement">
+                                                <input type="checkbox" id="notify-client" checked>
+                                                <span class="checkmark"></span>
+                                                Notifier le client par email
+                                            </label>
+                                            <small class="help-text">Un email est envoyé avec le nouveau statut et votre commentaire, si cette option reste cochée.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="status-form-actions">
+                                    <button type="submit" class="btn-primary" title="Enregistrer les modifications et mettre à jour le ticket">Mettre à jour le ticket</button>
+                                    <div class="status-form-hints">
+                                        <i class="fas fa-shield-check"></i>
+                                        <p>Les modifications sont tracées dans l'historique et visibles pour l'équipe. Le client est informé si la notification est activée.</p>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                </div> <!-- Fin ticket-details -->
+            </main>
+        </div>
+</div>
+    
+    <!-- UI Containers for custom modal and toasts -->
+    <div id="cpf-modal-root" style="display:none;"></div>
+    <!-- Turndown: HTML -> Markdown conversion for WYSIWYG saving -->
+    <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
+    <div id="cpf-toast-container" class="cpf-toast-container"></div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="admin.js?v=20251001-2"></script>
+    <script src="kanban.js?v=20250809-1"></script>
+    <script>
+      // Bouton rapide: "Inviter à laisser un avis" depuis la vue Commandes
+      (function(){
+        function getAuthToken(){ try { return window.authToken || localStorage.getItem('authToken') || ''; } catch(_){ return ''; } }
+        async function fetchOrder(orderId){
+          const token = getAuthToken();
+          if (!token || !orderId) return null;
+          try {
+            const res = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, { headers: { 'Authorization': `Basic ${token}` } });
+            if (!res.ok) return null;
+            return await res.json().catch(()=>null);
+          } catch { return null; }
+        }
+        async function onInviteClick(){
+          try {
+            const orderId = (window.resolveCurrentOrderId && window.resolveCurrentOrderId()) || '';
+            if (!orderId){ alert('Sélectionnez d\'abord une commande.'); return; }
+            const data = await fetchOrder(orderId);
+            const email = data && data.customer && data.customer.email ? data.customer.email.trim() : '';
+            const orderNumber = data && data.number ? String(data.number).trim() : '';
+            const qs = new URLSearchParams();
+            if (email) qs.set('email', email);
+            if (orderNumber) qs.set('orderNumber', orderNumber);
+            window.location.href = '/admin/reviews/' + (qs.toString() ? ('?' + qs.toString()) : '');
+          } catch(e) {
+            alert('Impossible de pré-remplir. Vous pouvez ouvrir l\'onglet Avis et saisir manuellement.');
+          }
+        }
+        function init(){
+          const btn = document.getElementById('orders-invite-review-btn');
+          if (btn) btn.addEventListener('click', onInviteClick);
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+      })();
+    </script>
+    <script>
+      // Déclenche l'actualisation des commandes quand le filtre Avis change
+      (function(){
+        function q(id){ return document.getElementById(id); }
+        function init(){
+          const sel = q('orders-review-filter');
+          const refresh = q('orders-refresh-btn');
+          if (sel && refresh) {
+            sel.addEventListener('change', () => {
+              try { refresh.click(); } catch(_) {}
+            });
+          }
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+      })();
+    </script>
+    <script>
+      // Sélection multiple + envoi d'invitations d'avis (bulk) côté Commandes
+      (function(){
+        function getAuthToken(){ try { return window.authToken || localStorage.getItem('authToken') || ''; } catch(_){ return ''; } }
+        function q(sel, root){ return (root||document).querySelector(sel); }
+        function qa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
+
+        function getSelectedOrderIds(){
+          return qa('input.order-select:checked').map(cb => cb.getAttribute('data-id')).filter(Boolean);
+        }
+
+        function updateBulkUI(){
+          const ids = getSelectedOrderIds();
+          const bar = q('#orders-bulk-actions');
+          const count = q('#orders-bulk-count');
+          if (bar) bar.style.display = ids.length ? 'flex' : 'none';
+          if (count) count.textContent = ids.length + ' sélectionnée(s)';
+          // maj état du select-all
+          const all = q('#orders-select-all');
+          const allBoxes = qa('input.order-select');
+          if (all) {
+            if (!allBoxes.length) { all.checked = false; all.indeterminate = false; }
+            else {
+              const sel = ids.length;
+              all.checked = sel && sel === allBoxes.length;
+              all.indeterminate = sel > 0 && sel < allBoxes.length;
+            }
+          }
+        }
+
+        function onSelectAllChange(e){
+          const checked = !!e.target.checked;
+          qa('input.order-select').forEach(cb => { cb.checked = checked; });
+          updateBulkUI();
+        }
+
+        function onOrdersListChange(e){
+          const t = e.target;
+          if (t && t.matches && t.matches('input.order-select')) {
+            updateBulkUI();
+          }
+        }
+
+        async function sendBulkInvites(){
+          const ids = getSelectedOrderIds();
+          if (!ids.length) { alert('Sélectionnez au moins une commande.'); return; }
+          const sendEmail = window.confirm('Envoyer les invitations par email automatiquement ?\nCliquez sur Annuler pour seulement générer les liens dans l\'onglet Avis.');
+          const token = getAuthToken();
+          if (!token) { alert('Veuillez vous reconnecter.'); return; }
+          try {
+            const res = await fetch('/api/admin/reviews/invites/bulk', {
+              method: 'POST',
+              headers: { 'Authorization': `Basic ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderIds: ids, sendEmail })
+            });
+            const data = await res.json().catch(() => ({ success:false, message:'Réponse invalide' }));
+            if (!res.ok || !data.success) { throw new Error(data.message || 'Échec de la création des invitations'); }
+            const created = Number(data.created || 0);
+            const processed = Number(data.processed || 0);
+            const total = Number(data.total || ids.length);
+            const failed = Math.max(processed - created, 0);
+            alert(`Invitations créées: ${created}/${total}` + (failed ? `\nÉchecs: ${failed}` : '') + (sendEmail ? '' : '\nAstuce: consultez /admin/reviews pour copier les liens.'));
+            // Optionnel: rafraîchir la vue commandes ou ouvrir l'onglet Avis
+          } catch(e) {
+            alert(e && e.message ? e.message : 'Erreur lors de l\'envoi en lot');
+          }
+        }
+
+        function observeOrdersList(){
+          const list = q('#orders-list');
+          if (!list || !window.MutationObserver) return;
+          const obs = new MutationObserver(() => { updateBulkUI(); });
+          obs.observe(list, { childList: true, subtree: true });
+        }
+
+        function initBulk(){
+          const selectAll = q('#orders-select-all');
+          if (selectAll) selectAll.addEventListener('change', onSelectAllChange);
+          const list = q('#orders-list');
+          if (list) list.addEventListener('change', onOrdersListChange);
+          const bulkBtn = q('#orders-bulk-invite');
+          if (bulkBtn) bulkBtn.addEventListener('click', sendBulkInvites);
+          observeOrdersList();
+          updateBulkUI();
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initBulk); else initBulk();
+      })();
+    </script>
+  </body>
+</html>

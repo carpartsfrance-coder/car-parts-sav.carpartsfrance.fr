@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administration – Invitations Avis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="../admin.css">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="/styles.css?v=1.0.3">
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f7f7f8; color:#111; }
+    .container { max-width: none; width:100%; margin: 16px auto; padding: 0 24px; }
+    .page-header { display:flex; align-items:center; justify-content:space-between; padding: 8px 0 14px; border-bottom: 2px solid #e5e7eb; }
+    .page-header h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; display:flex; align-items:center; gap:10px; }
+    /* Aplatir les cartes */
+    .card { background: transparent; border: none; border-radius: 0; box-shadow: none; margin-top: 8px; }
+    .card-header { padding: 10px 0; border-bottom: 2px solid #e5e7eb; display:flex; align-items:center; gap:10px; }
+    .card-header .icon { color:#e30613; }
+    .card-body { padding: 14px 0; }
+    .form-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; box-shadow: 0 8px 20px rgba(0,0,0,0.04); }
+    .form-group { display:flex; flex-direction:column; gap:6px; }
+    .form-group label { font-weight:600; color:#374151; }
+    .form-group input[type="text"], .form-group input[type="email"] { height:42px; border:1px solid #d1d5db; border-radius:10px; padding:0 12px; }
+    .form-group .hint { color:#6b7280; font-size:12px; }
+    .actions { display:flex; gap:10px; margin-top: 12px; }
+    .btn { background:#111827; color:#fff; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
+    .btn.secondary { background:#f3f4f6; color:#111827; }
+    .result { margin-top: 16px; padding: 12px; border-radius:10px; background:#fff; border:1px solid #e5e7eb; box-shadow:0 6px 16px rgba(0,0,0,0.04); }
+    .result code { background:#eef2ff; color:#1e3a8a; padding:2px 6px; border-radius:6px; }
+    .copy-row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+    .alert { display:none; padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+    .alert.success { display:block; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .alert.error { display:block; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+
+    /* Zone login aplanie */
+    .login-card { background: transparent; border:none; padding:0; margin-top:12px; }
+    .login-grid { display:grid; grid-template-columns: 1fr 1fr auto; gap:10px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; box-shadow:0 6px 16px rgba(0,0,0,0.04); }
+    @media (max-width:680px) { .login-grid { grid-template-columns: 1fr; } }
+    /* Table plein écran + style pro */
+    .tickets-table { width: 100%; border-collapse: collapse; }
+    .tickets-table thead th { position: sticky; top: 0; background:#ffffff; z-index: 1; border-bottom: 2px solid #e5e7eb; text-align:left; font-weight:700; padding:12px; color:#111827; }
+    .tickets-table tbody td { padding:12px; border-bottom:1px solid #eef2f7; vertical-align: top; line-height:1.45; }
+    .tickets-table tbody tr:nth-child(even) { background:#fafafa; }
+    .tickets-table tbody tr:hover { background:#f3f4f6; }
+    /* Harmonisation avec la table shipments */
+    .shipments-table td { line-height:1.45; }
+    .shipments-table td:nth-child(8) { max-width: 640px; }
+    .shipments-board { overflow-x:auto !important; overflow-y:visible !important; }
+    .copy-row { display:flex; align-items:flex-start; gap:6px; margin-top:6px; }
+    .copy-row code { display:block; max-width: 320px; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; background:#f8fafc; border:1px solid #e5e7eb; padding:6px 8px; border-radius:8px; }
+    .btn.sm { padding:6px 10px; font-size:12px; border-radius:8px; }
+    .history-header { display:flex; align-items:center; justify-content:space-between; padding:16px 0 10px; border-bottom:2px solid #e5e7eb; }
+    .history-title { display:flex; align-items:flex-start; gap:14px; }
+    .history-title h2 { margin:0; font-size:18px; letter-spacing:-0.01em; color:#111827; }
+    .history-title p { margin:4px 0 0; color:#64748b; font-size:13px; }
+    .history-icon { width:44px; height:44px; border-radius:14px; background:rgba(227,6,19,0.08); color:#e30613; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 6px 18px rgba(227,6,19,0.12); }
+    .history-meta { display:flex; align-items:center; gap:10px; }
+    .history-pill { display:inline-flex; align-items:center; justify-content:center; padding:6px 12px; border-radius:999px; background:#f8fafc; border:1px solid #e5e7eb; color:#111827; font-weight:600; font-size:12px; min-width:110px; text-align:center; }
+    @media (max-width: 720px) {
+      .copy-row { flex-direction: column; align-items: stretch; }
+      .shipments-table td:nth-child(8) { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="page-header">
+      <h1><i class="fas fa-star"></i> Invitations d’avis</h1>
+      <a class="btn secondary" href="/admin/"><i class="fas fa-arrow-left"></i> Retour admin</a>
+    </div>
+
+    <!-- Résumé style "page commande" -->
+    <div class="shipments-summary">
+      <div class="shipments-card">
+        <div class="shipments-card__icon total"><i class="fas fa-envelope-open-text"></i></div>
+        <div>
+          <h3>Total invitations</h3>
+          <p id="sum-total">—</p>
+          <small>Toutes périodes</small>
+        </div>
+      </div>
+      <div class="shipments-card">
+        <div class="shipments-card__icon today"><i class="fas fa-calendar-day"></i></div>
+        <div>
+          <h3>Créées aujourd’hui</h3>
+          <p id="sum-today">—</p>
+          <small>Depuis 00:00</small>
+        </div>
+      </div>
+      <div class="shipments-card">
+        <div class="shipments-card__icon overdue"><i class="fas fa-ban"></i></div>
+        <div>
+          <h3>Révoquées</h3>
+          <p id="sum-revoked">—</p>
+          <small>Liens invalidés</small>
+        </div>
+      </div>
+      <div class="shipments-card">
+        <div class="shipments-card__icon planning"><i class="fas fa-check-double"></i></div>
+        <div>
+          <h3>Décision renseignée</h3>
+          <p id="sum-decided">—</p>
+          <small>Oui/Non cliqués</small>
+        </div>
+      </div>
+    </div>
+
+    <div id="login-block" class="login-card" style="display:none;">
+      <h3 style="margin-top:0;">Connexion requise</h3>
+      <div class="login-grid">
+        <input id="login-username" type="text" placeholder="Nom d'utilisateur (admin)" />
+        <input id="login-password" type="password" placeholder="Mot de passe" />
+        <button id="login-save" class="btn">Se connecter</button>
+      </div>
+      <div id="login-msg" class="alert error" style="display:none; margin-top:10px;">Identifiants requis</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="icon"><i class="fas fa-envelope"></i></div>
+        <div>
+          <div style="font-weight:600;">Créer et envoyer une invitation</div>
+          <small style="color:#6b7280;">Générez des liens Oui/Non pour l’avis client et envoyez-les par email si besoin.</small>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="msg" class="alert" role="alert"></div>
+        <div class="form-grid shipments-toolbar shipments-quick-filters">
+          <div class="form-group">
+            <label for="email">Email du client</label>
+            <input id="email" type="email" placeholder="client@exemple.com" required />
+            <div class="hint">Obligatoire si vous cochez l’envoi d’email automatique.</div>
+          </div>
+          <div class="form-group">
+            <label for="orderNumber">N° de commande (optionnel)</label>
+            <input id="orderNumber" type="text" placeholder="Ex: 12345" />
+            <div class="hint">Utile pour le suivi interne.</div>
+          </div>
+          <div class="form-group">
+            <label>
+              <input id="sendEmail" type="checkbox" /> Envoyer l’email automatiquement au client
+            </label>
+            <div class="hint">Sinon, les liens seront affichés pour copier/coller dans votre propre message.</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="submit" class="btn"><i class="fas fa-paper-plane"></i> Générer/Envoyer</button>
+          <button id="reset" class="btn secondary"><i class="fas fa-rotate"></i> Réinitialiser</button>
+        </div>
+
+        <div id="result" class="result" style="display:none;">
+          <div><strong>Liens générés:</strong></div>
+          <div class="copy-row"><span>Oui (Trustpilot):</span> <code id="yesLink">—</code> <button class="btn secondary" data-copy="#yesLink">Copier</button></div>
+          <div class="copy-row"><span>Non (Feedback interne):</span> <code id="noLink">—</code> <button class="btn secondary" data-copy="#noLink">Copier</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="card-header history-header">
+        <div class="history-title">
+          <span class="history-icon"><i class="fas fa-list"></i></span>
+          <div>
+            <h2>Historique des invitations</h2>
+            <p>Consultez l’ensemble des envois, décisions et statuts en un coup d’œil.</p>
+          </div>
+        </div>
+        <div class="history-meta">
+          <span id="pagerInfo" class="history-pill">—</span>
+          <button id="refreshHistory" class="btn secondary sm"><i class="fas fa-rotate"></i> Actualiser</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid shipments-toolbar shipments-quick-filters" style="align-items:end;">
+          <div class="form-group">
+            <label for="q">Recherche</label>
+            <input id="q" type="text" placeholder="email, n° commande ou token…" />
+          </div>
+          <div class="form-group">
+            <label for="sort">Trier par</label>
+            <select id="sort">
+              <option value="createdAt">Création</option>
+              <option value="email">Email</option>
+              <option value="orderNumber">N° commande</option>
+              <option value="decision">Décision</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="dir">Ordre</label>
+            <select id="dir">
+              <option value="desc">Décroissant</option>
+              <option value="asc">Croissant</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pageSize">Taille page</label>
+            <select id="pageSize">
+              <option>20</option>
+              <option>50</option>
+              <option>100</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button id="searchBtn" class="btn"><i class="fas fa-search"></i> Rechercher</button>
+            <a id="exportCsv" class="btn secondary" href="#" target="_blank"><i class="fas fa-file-export"></i> Export CSV</a>
+          </div>
+        </div>
+
+        <div class="shipments-board" style="overflow:auto; margin-top:12px;">
+          <table class="shipments-table" style="min-width:960px;">
+            <thead>
+              <tr>
+                <th>Créé le</th>
+                <th>Email</th>
+                <th>N° commande</th>
+                <th>Décision</th>
+                <th>Oui le</th>
+                <th>Non le</th>
+                <th>Révoqué</th>
+                <th>Liens</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="invitesTbody">
+              <tr><td colspan="9" style="text-align:center; color:#6b7280;">— Aucun résultat —</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="actions" style="justify-content:flex-end; margin-top:10px;">
+          <div>
+            <button id="prevBtn" class="btn secondary"><i class="fas fa-chevron-left"></i> Précédent</button>
+            <button id="nextBtn" class="btn secondary">Suivant <i class="fas fa-chevron-right"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Récupère/stocke le token Basic auth
+    function getAuthToken() {
+      return window.authToken || localStorage.getItem('authToken') || '';
+    }
+    function setAuthToken(token) {
+      try { window.authToken = token; localStorage.setItem('authToken', token); } catch(_) {}
+    }
+
+    function showMsg(text, type) {
+      const el = document.getElementById('msg');
+      el.className = 'alert ' + (type === 'error' ? 'error' : 'success');
+      el.textContent = text;
+      el.style.display = 'block';
+    }
+
+    function hideMsg() { const el = document.getElementById('msg'); el.style.display='none'; }
+
+    function ensureLogin() {
+      const token = getAuthToken();
+      const block = document.getElementById('login-block');
+      if (!token) {
+        block.style.display = 'block';
+      } else {
+        block.style.display = 'none';
+      }
+    }
+
+    document.getElementById('login-save').addEventListener('click', () => {
+      const u = document.getElementById('login-username').value.trim();
+      const p = document.getElementById('login-password').value.trim();
+      const msg = document.getElementById('login-msg');
+      if (!u || !p) { msg.style.display='block'; return; }
+      msg.style.display='none';
+      const token = btoa(u + ':' + p);
+      setAuthToken(token);
+      ensureLogin();
+      showMsg('Connexion enregistrée. Vous pouvez maintenant envoyer une invitation.', 'success');
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      hideMsg();
+      document.getElementById('email').value = '';
+      document.getElementById('orderNumber').value = '';
+      document.getElementById('sendEmail').checked = false;
+      const r = document.getElementById('result');
+      r.style.display = 'none';
+    });
+
+    document.querySelectorAll('[data-copy]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        try {
+          const sel = btn.getAttribute('data-copy');
+          const el = document.querySelector(sel);
+          if (!el) return;
+          const text = el.textContent || '';
+          navigator.clipboard.writeText(text);
+          showMsg('Lien copié dans le presse-papiers.', 'success');
+        } catch(e) {
+          showMsg('Impossible de copier. Sélectionnez et copiez manuellement.', 'error');
+        }
+      });
+    });
+
+    document.getElementById('submit').addEventListener('click', async () => {
+      hideMsg();
+      const token = getAuthToken();
+      if (!token) { showMsg('Veuillez vous connecter (bloc ci-dessus).', 'error'); return; }
+      const email = document.getElementById('email').value.trim();
+      const orderNumber = document.getElementById('orderNumber').value.trim();
+      const sendEmail = document.getElementById('sendEmail').checked;
+      if (sendEmail && !email) { showMsg("L'email client est requis pour l'envoi.", 'error'); return; }
+
+      try {
+        const res = await fetch('/api/admin/reviews/invites', {
+          method: 'POST',
+          headers: { 'Authorization': `Basic ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, orderNumber, sendEmail, toEmail: email })
+        });
+        if (!res.ok) {
+          if (res.status === 401) { showMsg('Accès refusé. Identifiants incorrects ou manquants.', 'error'); return; }
+          const data = await res.json().catch(() => ({ message: 'Erreur inconnue' }));
+          throw new Error(data.message || 'Erreur lors de la création de l\'invitation');
+        }
+        const data = await res.json();
+        const inv = data && data.invite ? data.invite : null;
+        if (!inv) { showMsg('Réponse invalide du serveur.', 'error'); return; }
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('yesLink').textContent = inv.yesLink || '—';
+        document.getElementById('noLink').textContent = inv.noLink || '—';
+        showMsg(sendEmail ? 'Invitation envoyée par email et liens générés.' : 'Liens générés avec succès.', 'success');
+        try { await loadInvites(1); } catch(_) {}
+      } catch (e) {
+        showMsg(e.message || 'Erreur inattendue.', 'error');
+      }
+    });
+
+    // ------- Historique: liste / actions -------
+    let state = { page: 1 };
+
+    function fmt(d) {
+      if (!d) return '';
+      try { return new Date(d).toLocaleString(); } catch { return String(d); }
+    }
+
+    function buildCsvUrl() {
+      const q = encodeURIComponent(document.getElementById('q').value.trim());
+      const sort = encodeURIComponent(document.getElementById('sort').value);
+      const dir = encodeURIComponent(document.getElementById('dir').value);
+      const url = `/api/admin/reviews/invites/export.csv?q=${q}&sort=${sort}&dir=${dir}`;
+      document.getElementById('exportCsv').href = url;
+    }
+
+    async function loadInvites(page = 1) {
+      const token = getAuthToken();
+      const q = document.getElementById('q').value.trim();
+      const sort = document.getElementById('sort').value;
+      const dir = document.getElementById('dir').value;
+      const pageSize = document.getElementById('pageSize').value;
+      buildCsvUrl();
+      const url = `/api/admin/reviews/invites?q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}&page=${page}&pageSize=${pageSize}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Basic ${token}` } });
+      const data = await res.json().catch(() => ({ success:false, invites:[], total:0 }));
+      const tbody = document.getElementById('invitesTbody');
+      tbody.innerHTML = '';
+      if (!data.success || !Array.isArray(data.invites) || data.invites.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#6b7280;">— Aucun résultat —</td></tr>';
+        document.getElementById('pagerInfo').textContent = '0 résultat';
+        return;
+      }
+      for (const inv of data.invites) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${fmt(inv.createdAt)}</td>
+          <td>${inv.email || ''}</td>
+          <td>${inv.orderNumber || ''}</td>
+          <td>${inv.decision || ''}</td>
+          <td>${fmt(inv.clickedYesAt)}</td>
+          <td>${fmt(inv.clickedNoAt)}</td>
+          <td>${inv.revoked ? '<span style="color:#b91c1c;font-weight:600;">Oui</span>' : 'Non'}</td>
+          <td>
+            <div class="copy-row"><code class="yes">${inv.yesLink}</code> <button class="btn secondary sm" data-act="copy-yes">Copier</button></div>
+            <div class="copy-row"><code class="no">${inv.noLink}</code> <button class="btn secondary sm" data-act="copy-no">Copier</button></div>
+          </td>
+          <td>
+            <button class="btn secondary" data-act="resend" data-id="${inv._id}"><i class="fas fa-paper-plane"></i></button>
+            <button class="btn secondary" data-act="revoke" data-id="${inv._id}"><i class="fas fa-ban"></i></button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      const from = (page - 1) * data.pageSize + 1;
+      const to = from + data.invites.length - 1;
+      document.getElementById('pagerInfo').textContent = `${from}–${to} sur ${data.total}`;
+      state.page = page;
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', () => loadInvites(1));
+    document.getElementById('prevBtn').addEventListener('click', () => { const p = Math.max((state.page||1)-1,1); loadInvites(p); });
+    document.getElementById('nextBtn').addEventListener('click', () => { loadInvites((state.page||1)+1); });
+    document.getElementById('refreshHistory').addEventListener('click', () => loadInvites(state.page || 1));
+    document.getElementById('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadInvites(1); } });
+
+    document.getElementById('invitesTbody').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      const codeYes = tr.querySelector('code.yes');
+      const codeNo = tr.querySelector('code.no');
+      const act = btn.getAttribute('data-act');
+      if (act === 'copy-yes') {
+        await navigator.clipboard.writeText(codeYes.textContent||'');
+        showMsg('Lien Oui copié.', 'success');
+      } else if (act === 'copy-no') {
+        await navigator.clipboard.writeText(codeNo.textContent||'');
+        showMsg('Lien Non copié.', 'success');
+      } else if (act === 'resend') {
+        const id = btn.getAttribute('data-id');
+        const defaultEmail = tr.children[1]?.textContent?.trim() || '';
+        const toEmail = prompt('Adresse email destinataire :', defaultEmail);
+        if (!toEmail) return;
+        const res = await fetch(`/api/admin/reviews/invites/${encodeURIComponent(id)}/resend`, {
+          method: 'POST',
+          headers: { 'Authorization': `Basic ${getAuthToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toEmail })
+        });
+        if (res.ok) showMsg('Invitation renvoyée.', 'success'); else showMsg('Échec de renvoi.', 'error');
+      } else if (act === 'revoke') {
+        const id = btn.getAttribute('data-id');
+        if (!confirm('Révoquer ce lien ? Il deviendra invalide.')) return;
+        const res = await fetch(`/api/admin/reviews/invites/${encodeURIComponent(id)}/revoke`, {
+          method: 'POST',
+          headers: { 'Authorization': `Basic ${getAuthToken()}` }
+        });
+        if (res.ok) { showMsg('Invitation révoquée.', 'success'); loadInvites(state.page||1); } else { showMsg('Échec de révocation.', 'error'); }
+      }
+    });
+
+    function prefillFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const email = params.get('email');
+      const orderNumber = params.get('orderNumber');
+      if (email) document.getElementById('email').value = email;
+      if (orderNumber) document.getElementById('orderNumber').value = orderNumber;
+    }
+
+    // Init
+    ensureLogin();
+    prefillFromQuery();
+    buildCsvUrl();
+    loadInvites(1);
+  </script>
+  <script>
+    async function loadSummary() {
+      try {
+        const token = getAuthToken();
+        let page = 1; const pageSize = 100;
+        let total = 0, today = 0, revoked = 0, decided = 0, fetched = 0;
+        const todayStr = new Date().toISOString().slice(0,10);
+        while (true) {
+          const url = `/api/admin/reviews/invites?page=${page}&pageSize=${pageSize}`;
+          const res = await fetch(url, { headers: { 'Authorization': `Basic ${token}` } });
+          if (!res.ok) break;
+          const data = await res.json();
+          if (!data || !Array.isArray(data.invites)) break;
+          if (!total) total = Number(data.total||0);
+          for (const inv of data.invites) {
+            const c = inv.createdAt ? new Date(inv.createdAt) : null;
+            if (c && c.toISOString().slice(0,10) === todayStr) today++;
+            if (inv.revoked) revoked++;
+            if (inv.decision) decided++;
+          }
+          fetched += data.invites.length;
+          if (fetched >= total || data.invites.length === 0) break;
+          page++;
+        }
+        document.getElementById('sum-total').textContent = total;
+        document.getElementById('sum-today').textContent = today;
+        document.getElementById('sum-revoked').textContent = revoked;
+        document.getElementById('sum-decided').textContent = decided;
+      } catch(_) {}
+    }
+    // étendre l'init
+    (function(){
+      try { loadSummary(); } catch(_) {}
+      const origLoad = loadInvites;
+      loadInvites = async function(page){
+        const r = await origLoad(page);
+        try { loadSummary(); } catch(_) {}
+        return r;
+      };
+    })();
+  </script>
+</body>
+</html>

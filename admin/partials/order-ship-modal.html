@@ -1,0 +1,49 @@
+<div class="modal" id="order-ship-modal" role="dialog" aria-modal="true" aria-labelledby="order-ship-title" hidden>
+    <div class="modal__backdrop" data-ship-close></div>
+    <div class="modal__dialog" role="document">
+        <header class="modal__header">
+            <h2 class="modal__title" id="order-ship-title"><i class="fas fa-truck"></i> Expédier la commande</h2>
+            <button class="modal__close" type="button" data-ship-close aria-label="Fermer"><i class="fas fa-times"></i></button>
+        </header>
+        <div class="modal__body">
+            <p class="modal__intro">
+                Renseigne le transporteur et le numéro de suivi. La commande sera marquée comme <strong>expédiée</strong> et la synchronisation ParcelPanel/WooCommerce sera déclenchée automatiquement.
+            </p>
+            <form id="order-ship-form">
+                <input type="hidden" id="order-ship-id" name="orderId">
+                <div class="form-group">
+                    <label for="order-ship-carrier">Transporteur</label>
+                    <select id="order-ship-carrier" name="carrier" required>
+                        <option value="">Choisir…</option>
+                        <option value="colissimo">Colissimo</option>
+                        <option value="chronopost">Chronopost</option>
+                        <option value="dpd">DPD</option>
+                        <option value="ups">UPS</option>
+                        <option value="fedex">FedEx</option>
+                        <option value="gls">GLS</option>
+                        <option value="autre">Autre…</option>
+                    </select>
+                </div>
+                <div class="form-group form-group--hidden" id="order-ship-carrier-custom-wrapper">
+                    <label for="order-ship-carrier-custom">Nom du transporteur</label>
+                    <input type="text" id="order-ship-carrier-custom" placeholder="Transporteur" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="order-ship-tracking">Numéro de suivi</label>
+                    <input type="text" id="order-ship-tracking" name="tracking" placeholder="Ex: 8L000000000" required>
+                </div>
+                <div class="form-group">
+                    <label for="order-ship-date">Date d'expédition</label>
+                    <input type="date" id="order-ship-date" name="shippedDate">
+                    <small>Par défaut, aujourd'hui.</small>
+                </div>
+            </form>
+        </div>
+        <footer class="modal__footer">
+            <button class="btn-secondary" type="button" data-ship-close>Annuler</button>
+            <button class="btn-primary" type="button" id="order-ship-submit">
+                <i class="fas fa-paper-plane"></i> Confirmer l'expédition
+            </button>
+        </footer>
+    </div>
+</div>

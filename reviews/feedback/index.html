@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Votre avis - Aide-nous à nous améliorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=1.0.3">
+  <link rel="stylesheet" href="/safari-fixes.css?v=1.0.2" media="all">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root{
+      --brand:#e30613; --text:#0f172a; --muted:#6b7280; --bg:#f7f7f8; --line:#e5e7eb; --ok:#059669; --warn:#f59e0b;
+    }
+    *{ box-sizing:border-box; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    header { max-width:1120px; margin:32px auto 18px; padding:0 16px; }
+    .header-surface { position:relative; background:#fff; border:1px solid rgba(34,34,34,0.08); border-radius:24px; padding:24px 28px; box-shadow:0 20px 44px rgba(34,34,34,0.08); display:flex; flex-direction:column; gap:18px; overflow:hidden; }
+    .header-surface::after { content:""; position:absolute; inset:-160px auto auto -160px; width:360px; height:360px; background:radial-gradient(closest-side, rgba(227,6,19,0.08), rgba(227,6,19,0)); pointer-events:none; filter:blur(2px); }
+    .header-main { position:relative; display:flex; align-items:center; gap:20px; z-index:1; }
+    .header-logo { width:68px; height:68px; border-radius:18px; background:linear-gradient(135deg, rgba(227,6,19,0.18) 0%, rgba(227,6,19,0.05) 100%); display:flex; align-items:center; justify-content:center; padding:12px; box-shadow:0 14px 32px rgba(227,6,19,0.14); }
+    .header-logo img { width:100%; height:100%; object-fit:contain; filter:saturate(110%); }
+    .header-title { display:flex; flex-direction:column; gap:8px; }
+    .header-title .stage-tag { margin-bottom:4px; }
+    .header-title h1 { margin:0; font-size:26px; font-weight:700; color:#111827; letter-spacing:-0.02em; }
+    .header-subtitle { margin:0; color:#4b5563; font-size:15px; max-width:520px; }
+    .header-badges { position:relative; display:flex; flex-wrap:wrap; gap:10px; z-index:1; }
+    .header-chip { display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:#1f2937; padding:6px 14px; border-radius:12px; background:#f7f7f8; border:1px solid rgba(34,34,34,0.1); box-shadow:0 4px 12px rgba(34,34,34,0.06); }
+    .header-chip i { color:#e30613; font-size:12px; }
+
+    .container { max-width: 1120px; margin: 0 auto 24px; padding: 0 16px; }
+
+    .layout{ display:grid; gap:16px; grid-template-columns: 1fr; margin-top:16px; }
+    @media(min-width: 960px){ .layout{ grid-template-columns: 1.6fr 1fr; } }
+
+    .card { background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .card-header { background:var(--brand); color:#fff; padding:16px 20px; border-radius:12px 12px 0 0; }
+    .card-header h2 { font-size: 18px; margin: 0; }
+    .card-body { padding: 20px; }
+
+    .form-group { margin-bottom: 16px; }
+    label { display:block; font-weight:600; margin-bottom: 6px; }
+    select, textarea, input[type="text"] { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:14px; background:#fff; }
+    textarea { min-height: 140px; resize: vertical; }
+    .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .chip{ background:#f3f4f6; border:1px solid var(--line); padding:6px 10px; border-radius:999px; font-size:12px; cursor:pointer; }
+    .chip:hover{ background:#e5e7eb; }
+    .counter{ color:var(--muted); font-size:12px; text-align:right; margin-top:6px; }
+    .privacy{ display:flex; gap:8px; align-items:flex-start; background:#f9fafb; border:1px solid var(--line); padding:10px 12px; border-radius:10px; font-size:12px; color:#374151; }
+    .btn-row { display:flex; gap:12px; align-items:center; }
+    .btn { background:#111827; color:#fff; border:none; padding:10px 16px; border-radius:10px; cursor:pointer; font-weight:600; }
+    .btn.secondary{ background:#f3f4f6; color:#111827; }
+    .btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .subtle{ color:var(--muted); font-size:12px; margin-top:8px; }
+    .alert { padding:10px 12px; border-radius:10px; background:#fef3c7; color:#92400e; border:1px solid #fde68a; margin-bottom:12px; display:none; }
+    .error { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+    .success{ background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+    .loader{ display:inline-block; width:16px; height:16px; border:2px solid #fff; border-right-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; margin-left:8px; }
+    @keyframes spin{ to { transform:rotate(360deg); } }
+
+    .side-card .list{ list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+    .side-card .list li{ display:flex; gap:10px; align-items:flex-start; }
+    .side-card .list i{ color:var(--brand); margin-top:2px; }
+    .faq{ margin-top:12px; }
+    .faq details{ border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:#fff; }
+    .faq summary{ cursor:pointer; font-weight:600; }
+    /* Fallback minimal pour la barre de progression (au cas où styles.css ne la définit pas) */
+    .progress-bar{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; background:#f7f7f8; border:1px solid rgba(34,34,34,0.08); border-radius:16px; padding:12px 16px; }
+    .progress-bar .step{ display:flex; align-items:center; gap:12px; background:#fff; border:1px solid rgba(34,34,34,0.08); border-radius:14px; padding:12px 14px; min-width:180px; box-shadow:0 6px 16px rgba(34,34,34,0.05); transition:transform .2s ease; }
+    .progress-bar .step .step-number{ width:32px; height:32px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-weight:700; color:#fff; background:#e30613; box-shadow:0 4px 12px rgba(227,6,19,0.2); }
+    .progress-bar .step .step-text{ font-weight:600; color:#1f2933; font-size:15px; }
+    .progress-bar .step .step-time{ color:#6b7280; font-size:12px; font-weight:500; }
+    .progress-bar .step.active{ border-color: rgba(227,6,19,0.35); box-shadow:0 10px 26px rgba(227,6,19,0.12); transform:translateY(-1px); }
+    .buttons{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .required{ color: var(--brand); margin-left:4px; }
+    .feedback-banner{ display:grid; grid-template-columns: auto 1fr; gap:16px; align-items:center; background:#fff; border:1px solid rgba(34,34,34,0.08); border-radius:20px; padding:22px 24px; margin-bottom:22px; box-shadow:0 18px 40px rgba(34,34,34,0.08); }
+    .feedback-banner__icon{ width:64px; height:64px; border-radius:18px; background:rgba(227,6,19,0.12); display:flex; align-items:center; justify-content:center; padding:10px; }
+    .feedback-banner__icon img{ width:100%; height:100%; object-fit:contain; filter:saturate(110%); }
+    .feedback-banner__content h3{ margin:0; font-size:22px; font-weight:700; color:#111827; }
+    .feedback-banner__content p{ margin:6px 0 14px; font-size:14px; color:#4b5563; }
+    .feedback-meta{ display:flex; gap:12px; flex-wrap:wrap; }
+    .feedback-meta span{ display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:12px; padding:6px 12px; border-radius:999px; background:#f7f7f8; border:1px solid rgba(34,34,34,0.1); color:#1f2937; }
+    .feedback-meta span i{ font-size:12px; color:#e30613; }
+    .feedback-insights{ display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:22px; }
+    .feedback-card{ background:#fff; border:1px solid rgba(34,34,34,0.08); border-radius:14px; box-shadow:0 10px 28px rgba(34,34,34,0.07); padding:18px; display:flex; flex-direction:column; gap:10px; }
+    .feedback-card__icon{ width:42px; height:42px; border-radius:14px; background:linear-gradient(135deg, rgba(227,6,19,0.16) 0%, rgba(227,6,19,0.05) 100%); color:#b3000b; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 10px 22px rgba(227,6,19,0.12); }
+    .feedback-card strong{ font-size:15px; color:#111827; }
+    .feedback-card p{ margin:0; color:#4b5563; font-size:13px; }
+    .layout{ gap:22px; }
+    .card{ height:100%; }
+    .card-header{ background:#fff; border-bottom:1px solid rgba(34,34,34,0.08); color:#111827; padding:18px 24px; border-radius:16px 16px 0 0; display:flex; align-items:center; gap:10px; }
+    .card-header h2{ font-size:18px; margin:0; }
+    .card-body{ padding:24px; display:flex; flex-direction:column; gap:22px; background:#fff; border-radius:0 0 16px 16px; }
+    .form-intro{ margin:0; color:#4b5563; font-size:14px; line-height:1.6; }
+    .form-group{ margin-bottom:18px; }
+    .form-group label{ display:flex; align-items:center; gap:6px; font-weight:600; color:#0f172a; }
+    .tooltip-container{ position:relative; display:inline-flex; align-items:center; justify-content:center; }
+    .tooltip-icon{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:rgba(227,6,19,0.12); color:#e30613; font-size:11px; cursor:pointer; }
+    .tooltip-container:hover .tooltip-content{ opacity:1; visibility:visible; transform:translateY(0); }
+    .tooltip-content{ position:absolute; top:115%; left:50%; transform:translate(-50%,8px); background:#fff; color:#0f172a; border:1px solid rgba(15,23,42,0.08); border-radius:12px; padding:14px; width:240px; box-shadow:0 16px 40px rgba(15,23,42,0.15); opacity:0; visibility:hidden; transition:all .2s ease; z-index:20; }
+    .tooltip-title{ font-weight:600; margin-bottom:6px; }
+    .chips{ gap:10px; }
+    .chip{ background:#f8fafc; border:1px solid rgba(15,23,42,0.08); color:#1f2937; font-weight:500; }
+    .chip:hover{ background:#e0e7ff; border-color:#6366f1; color:#312e81; }
+    textarea{ box-shadow:0 0 0 0 rgba(227,6,19,0); transition:box-shadow .2s ease, border .2s ease; }
+    textarea:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(227,6,19,0.18); }
+    .privacy{ background:#f8fafc; border:1px dashed rgba(34,34,34,0.12); color:#4b5563; font-size:12px; }
+    .buttons .btn{ padding:12px 18px; border-radius:12px; font-size:15px; background:var(--brand); }
+    .buttons .btn:hover{ background:#c40c11; }
+    .buttons .subtle{ color:#4b5563; }
+    .contact-card{ display:flex; flex-direction:column; gap:16px; }
+    .contact-item{ display:flex; align-items:flex-start; gap:12px; padding:14px; border-radius:14px; background:#fff; border:1px solid rgba(34,34,34,0.08); box-shadow:0 8px 20px rgba(34,34,34,0.06); }
+    .contact-item i{ width:34px; height:34px; border-radius:12px; background:rgba(227,6,19,0.12); color:#e30613; display:flex; align-items:center; justify-content:center; margin-top:4px; }
+    .contact-item strong{ font-size:14px; color:#111827; }
+    .contact-item p{ margin:4px 0 0; font-size:13px; color:#4b5563; }
+    .contact-item a{ color:#e30613; font-weight:600; text-decoration:none; }
+    .contact-item a:hover{ text-decoration:underline; }
+    .faq details{ border-color:rgba(34,34,34,0.08); background:#fff; box-shadow:0 10px 26px rgba(34,34,34,0.05); }
+    .faq summary{ font-size:14px; color:#1f2937; }
+    .faq p{ margin:8px 0 0; color:#4b5563; font-size:13px; }
+    /* Accent modern pour la bannière */
+    .feedback-banner{ position:relative; overflow:hidden; }
+    .feedback-banner::before{ content:''; position:absolute; inset:auto 0 auto auto; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg, #e30613 0%, rgba(227,6,19,0.15) 100%); border-radius:20px 0 0 20px; }
+    /* Effets sur les cartes */
+    .feedback-card{ transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+    .feedback-card:hover{ transform:translateY(-2px); box-shadow:0 14px 32px rgba(34,34,34,0.08); border-color:rgba(34,34,34,0.12); }
+    .feedback-card .card-title{ margin:0; font-size:15px; color:#111827; font-weight:700; }
+    /* Micro animation d’apparition */
+    @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .feedback-banner, .feedback-insights, .layout{ animation:fadeUp .28s ease both; }
+    /* Surface dédiée pour différencier visuellement la section */
+    .feedback-surface{ position:relative; background:linear-gradient(180deg,#ffffff 0%, #fafafa 100%); border:1px solid rgba(34,34,34,0.08); border-radius:24px; padding:22px; box-shadow:0 24px 48px rgba(34,34,34,0.08); overflow:hidden; }
+    .feedback-surface::before{ content:""; position:absolute; right:-120px; top:-120px; width:320px; height:320px; background:radial-gradient(closest-side, rgba(227,6,19,0.10), rgba(227,6,19,0)); filter:blur(2px); pointer-events:none; }
+    .feedback-surface::after{ content:""; position:absolute; left:-140px; bottom:-140px; width:360px; height:360px; background:radial-gradient(closest-side, rgba(15,23,42,0.06), rgba(15,23,42,0)); filter:blur(2px); pointer-events:none; }
+    .section-divider{ height:1px; background:linear-gradient(90deg, rgba(34,34,34,0), rgba(34,34,34,0.12), rgba(34,34,34,0)); margin:16px 0; border:none; }
+    .header-icon{ color:#e30613; margin-right:10px; font-size:16px; }
+    .stage-tag{ display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:12px; color:#1f2937; background:#f7f7f8; border:1px solid rgba(34,34,34,0.10); border-radius:999px; padding:6px 10px; }
+    @media(max-width:720px){
+      .feedback-banner{ grid-template-columns:1fr; text-align:left; }
+      .progress-bar{ padding:10px 12px; }
+      .progress-bar .step{ width:100%; }
+      .card-body{ padding:18px; }
+      /* Masquer les cartes d'explication sur mobile pour aller directement au formulaire */
+      .feedback-insights{ display:none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" style="margin-top:32px;">
+    <div class="feedback-banner">
+      <div class="feedback-banner__icon"><img src="/logo.png" alt="Car Parts France" loading="lazy"></div>
+      <div class="feedback-banner__content">
+        <h3>Merci pour votre retour</h3>
+        <p>Décrivez simplement ce qui s’est passé. Ces informations nous aident à comprendre le contexte et à améliorer nos services.</p>
+        <div class="feedback-meta">
+          <span><i class="fas fa-user-shield"></i>Données confidentielles et sécurisées</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="feedback-insights">
+      <div class="feedback-card">
+        <div class="feedback-card__icon"><i class="fa-solid fa-ear-listen"></i></div>
+        <strong>Écoute active</strong>
+        <p>Chaque retour est étudié en interne. Votre message contribue à améliorer nos processus.</p>
+      </div>
+      <div class="feedback-card">
+        <div class="feedback-card__icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+        <strong>Diagnostic expert</strong>
+        <p>Nous analysons les causes possibles (logistique, référence, contexte d’utilisation) pour mieux comprendre la situation.</p>
+      </div>
+      <div class="feedback-card">
+        <div class="feedback-card__icon"><i class="fa-solid fa-chart-line"></i></div>
+        <strong>Suivi transparent</strong>
+        <p>Le traitement est documenté en interne afin d’assurer une amélioration continue.</p>
+      </div>
+    </div>
+
+    <section class="layout">
+      <article class="card">
+        <div class="card-header"><h2>Décrivez votre problème</h2></div>
+        <div class="card-body">
+          <p class="form-intro">Complétez ce formulaire en quelques lignes. Vos informations nous aideront à comprendre le contexte.</p>
+          <div id="alert" class="alert" role="alert"></div>
+          <form id="feedbackForm">
+            <div class="form-group">
+              <label for="reason">Quelle est la raison principale de votre insatisfaction ?<span class="required" aria-hidden="true">*</span>
+                <span class="tooltip-container">
+                  <span class="tooltip-icon">i</span>
+                  <div class="tooltip-content">
+                    <div class="tooltip-title">Aide au choix</div>
+                    <p>Choisissez la catégorie qui décrit le mieux votre problème. Vous pourrez préciser ensuite.</p>
+                  </div>
+                </span>
+              </label>
+              <select id="reason" name="reason" required>
+                <option value="" disabled selected>Choisissez une option</option>
+                <option value="livraison">Problème de livraison</option>
+                <option value="produit">Problème avec le produit</option>
+                <option value="service">Qualité du service</option>
+                <option value="delai">Délais / disponibilité</option>
+                <option value="autre">Autre</option>
+              </select>
+              <div id="reasonOtherWrap" class="form-group" style="display:none; margin-top:10px;">
+                <label for="reasonOther">Précisez</label>
+                <input type="text" id="reasonOther" placeholder="Ex: couleur incorrecte, colis abîmé, etc.">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="details">Pouvez-vous décrire brièvement ce qui n’a pas été ?
+                <span class="tooltip-container">
+                  <span class="tooltip-icon">i</span>
+                  <div class="tooltip-content">
+                    <div class="tooltip-title">Conseil</div>
+                    <p>Indiquez les faits clés (dates, symptômes, attentes). Cela nous aide à agir rapidement.</p>
+                  </div>
+                </span>
+              </label>
+              <textarea id="details" name="details" placeholder="Dites-nous ce qu’il s’est passé, quand, et ce que vous attendez de nous."></textarea>
+              <div class="chips">
+                <span class="chip" data-snippet="Colis reçu en retard">Colis en retard</span>
+                <span class="chip" data-snippet="Produit endommagé à la réception">Produit endommagé</span>
+                <span class="chip" data-snippet="Référence non conforme à ma commande">Référence non conforme</span>
+                <span class="chip" data-snippet="Difficultés à joindre le support">Difficultés à joindre le support</span>
+              </div>
+              <div id="detailsCount" class="counter">0 caractère</div>
+              <div class="privacy"><i class="fa-solid fa-user-shield"></i> Vos informations sont traitées de façon confidentielle et utilisées uniquement pour analyser votre situation et améliorer nos services.</div>
+            </div>
+
+            <div class="buttons">
+              <button class="btn" type="submit" id="submitBtn">
+                Envoyer mon retour <span id="btnSpinner" class="loader" style="display:none;"></span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </article>
+      <!-- aside supprimé à la demande de l'utilisateur -->
+    </section>
+  </div>
+
+  <script>
+    (function(){
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('t');
+      const alertBox = document.getElementById('alert');
+      const form = document.getElementById('feedbackForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const detailsEl = document.getElementById('details');
+      const counterEl = document.getElementById('detailsCount');
+      const reasonEl = document.getElementById('reason');
+      const reasonOtherWrap = document.getElementById('reasonOtherWrap');
+      const reasonOtherInput = document.getElementById('reasonOther');
+
+      function showAlert(msg, isError){
+        alertBox.textContent = msg;
+        alertBox.classList.remove('error','success');
+        alertBox.classList.add(isError ? 'error' : 'success');
+        alertBox.style.display = 'block';
+      }
+
+      if(!token){
+        window.location.href = '/reviews/lien-invalide/';
+        return;
+      }
+
+      function updateCounter(){
+        const n = (detailsEl.value || '').length;
+        counterEl.textContent = `${n} ${n>1? 'caractères' : 'caractère'}`;
+      }
+      updateCounter();
+      detailsEl.addEventListener('input', updateCounter);
+
+      document.querySelectorAll('.chip[data-snippet]').forEach(ch => {
+        ch.addEventListener('click', () => {
+          const t = ch.getAttribute('data-snippet') || '';
+          const cur = detailsEl.value || '';
+          detailsEl.value = cur ? (cur.trim() + (cur.trim().endsWith('.')?'':' .') + ' ' + t) : t;
+          detailsEl.focus();
+          updateCounter();
+        });
+      });
+
+      reasonEl.addEventListener('change', () => {
+        reasonOtherWrap.style.display = reasonEl.value === 'autre' ? 'block' : 'none';
+      });
+
+      form.addEventListener('submit', async function(e){
+        e.preventDefault();
+        alertBox.style.display = 'none';
+        submitBtn.disabled = true; btnSpinner.style.display = 'inline-block';
+        try {
+          let reason = reasonEl.value;
+          if(!reason){
+            showAlert('Merci de sélectionner une raison.', true);
+            submitBtn.disabled = false; btnSpinner.style.display = 'none';
+            return;
+          }
+          if (reason === 'autre') {
+            const extra = (reasonOtherInput.value || '').trim();
+            if (extra) reason = `autre: ${extra}`;
+          }
+          const body = {
+            reason,
+            details: detailsEl.value || ''
+          };
+          const resp = await fetch(`/api/reviews/feedback/${encodeURIComponent(token)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if(!resp.ok){
+            if(resp.status === 404){
+              window.location.href = '/reviews/lien-invalide/';
+              return;
+            }
+            const data = await resp.json().catch(()=>({message:'Erreur inconnue'}));
+            throw new Error(data.message || 'Erreur lors de l\'envoi du feedback');
+          }
+          window.location.href = '/reviews/merci-interne/';
+        } catch (err){
+          showAlert(err.message || 'Une erreur inattendue est survenue.', true);
+        } finally {
+          submitBtn.disabled = false; btnSpinner.style.display = 'none';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

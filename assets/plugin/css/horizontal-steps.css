@@ -1,0 +1,171 @@
+/* Styles pour afficher les étapes horizontalement avec un design moderne */
+
+/* Conteneur des étapes */
+.cpf-steps-indicator {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+    margin: 1.5rem 0 2rem !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+    position: relative !important;
+    padding: 0 0.5rem !important;
+}
+
+/* Ligne de connexion entre les étapes */
+.cpf-steps-indicator:before {
+    content: '' !important;
+    position: absolute !important;
+    top: 1rem !important;
+    left: 2.5rem !important;
+    right: 2.5rem !important;
+    height: 2px !important;
+    background: #e5e7eb !important;
+    z-index: 1 !important;
+}
+
+/* Chaque étape */
+.cpf-step {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    flex: 1 !important;
+    position: relative !important;
+    padding: 0.5rem !important;
+    z-index: 2 !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Numéro d'étape */
+.cpf-step-number {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    background-color: white !important;
+    color: #9ca3af !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.75rem !important;
+    font-size: 0.875rem !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08) !important;
+    border: 2px solid #e5e7eb !important;
+}
+
+/* Étape active */
+.cpf-step.active .cpf-step-number {
+    background: linear-gradient(135deg, #e52d27, #b31217) !important;
+    color: white !important;
+    border: none !important;
+    box-shadow: 0 3px 10px rgba(229, 45, 39, 0.3) !important;
+    transform: scale(1.05) !important;
+}
+
+/* Informations de l'étape */
+.cpf-step-info {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Titre de l'étape */
+.cpf-step-title {
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    color: #4b5563 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+    transition: color 0.3s ease !important;
+}
+
+/* Temps de l'étape */
+.cpf-step-time {
+    font-size: 0.7rem !important;
+    color: #9ca3af !important;
+    margin-top: 0.15rem !important;
+    opacity: 0.9 !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Style pour l'étape active */
+.cpf-step.active .cpf-step-title {
+    color: #e52d27 !important;
+    font-weight: 700 !important;
+}
+
+.cpf-step.active .cpf-step-time {
+    color: #6b7280 !important;
+    opacity: 1 !important;
+}
+
+/* Ajouter un effet de survol pour les étapes */
+.cpf-step:not(.active):hover .cpf-step-number {
+    border-color: #d1d5db !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Styles pour très petits écrans */
+@media (max-width: 480px) {
+    /* Optimiser l'espace entre les étapes */
+    .cpf-steps-indicator {
+        gap: 0.25rem !important;
+        padding: 0 !important;
+        margin: 1rem 0 1.5rem !important;
+    }
+    
+    /* Ajuster la ligne de connexion */
+    .cpf-steps-indicator:before {
+        left: 1.5rem !important;
+        right: 1.5rem !important;
+    }
+    
+    /* Réduire la taille des numéros d'étape */
+    .cpf-step-number {
+        width: 1.65rem !important;
+        height: 1.65rem !important;
+        font-size: 0.7rem !important;
+        margin-bottom: 0.35rem !important;
+    }
+    
+    /* Optimiser les titres d'étape */
+    .cpf-step-title {
+        font-size: 0.65rem !important;
+        white-space: normal !important;
+        max-width: 80px !important;
+        text-align: center !important;
+        line-height: 1.2 !important;
+    }
+    
+    /* Optimiser le temps d'étape */
+    .cpf-step-time {
+        font-size: 0.6rem !important;
+    }
+    
+    /* Ajuster l'espacement des étapes */
+    .cpf-step {
+        padding: 0.25rem !important;
+    }
+}
+
+/* Styles pour les écrans très étroits */
+@media (max-width: 360px) {
+    .cpf-step {
+        padding: 0.25rem !important;
+    }
+    
+    .cpf-step-number {
+        width: 1.5rem !important;
+        height: 1.5rem !important;
+        font-size: 0.7rem !important;
+    }
+}

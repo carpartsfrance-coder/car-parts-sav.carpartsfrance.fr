@@ -1,0 +1,286 @@
+/* Styles mobiles spécifiques pour le formulaire CarPartsFrance */
+
+/* Styles généraux pour mobile */
+@media (max-width: 768px) {
+    /* Conteneur principal */
+    .cpf-container {
+        padding: 1rem 1.25rem !important;
+        border-radius: 0.75rem !important;
+        max-width: 100% !important;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03) !important;
+        overflow-x: hidden !important;
+    }
+    
+    /* Réduire l'espacement vertical global */
+    .cpf-container h2, 
+    .cpf-container h3, 
+    .cpf-container p, 
+    .cpf-mb-4, 
+    .cpf-mb-2 {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Bannière de bénéfices */
+    .cpf-benefits-banner {
+        padding: 1rem 1.25rem !important;
+        margin-bottom: 1.25rem !important;
+        background: linear-gradient(145deg, #ffffff, #f9fafb) !important;
+        border: none !important;
+        border-radius: 1rem !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    
+    /* Titre de la bannière */
+    .cpf-benefits-banner h3 {
+        font-size: 0.9rem !important;
+        margin-bottom: 0.75rem !important;
+        color: #374151 !important;
+        font-weight: 600 !important;
+        text-align: center !important;
+    }
+    
+    /* Section des étoiles */
+    .cpf-benefits-banner .cpf-flex.cpf-items-center.cpf-mb-3 {
+        display: flex !important;
+        justify-content: center !important;
+        margin-bottom: 1rem !important;
+        background: linear-gradient(145deg, #fffaf0, #fff8e6) !important;
+        padding: 0.5rem 0.75rem !important;
+        border-radius: 0.75rem !important;
+        width: fit-content !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
+    
+    /* Étoiles */
+    .cpf-benefits-banner svg[style*="color: #FFD700"] {
+        color: #FFD700 !important;
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1)) !important;
+    }
+    
+    /* Grille des bénéfices */
+    .cpf-benefits-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+    }
+    
+    /* Éléments de bénéfice */
+    .cpf-benefit-item {
+        flex: 1 1 100% !important;
+        max-width: 100% !important;
+        margin-bottom: 0.75rem !important;
+        padding: 0.75rem !important;
+        display: flex !important;
+        align-items: center !important;
+        background: linear-gradient(145deg, #ffffff, #f9fafb) !important;
+        border-radius: 0.75rem !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03) !important;
+        border-left: 3px solid #e52d27 !important;
+    }
+    
+    /* Icônes de bénéfice */
+    .cpf-benefit-icon {
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        background: linear-gradient(135deg, #fff5f5, #ffffff) !important;
+        color: #e52d27 !important;
+        border-radius: 50% !important;
+        margin-right: 0.75rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 3px 8px rgba(229, 45, 39, 0.15) !important;
+    }
+    
+    /* Icônes SVG */
+    .cpf-benefit-icon svg {
+        width: 18px !important;
+        height: 18px !important;
+    }
+    
+    /* Texte des bénéfices */
+    .cpf-benefit-item p {
+        font-size: 0.85rem !important;
+        line-height: 1.3 !important;
+        margin: 0 !important;
+        color: #374151 !important;
+    }
+    
+    /* Texte en gras */
+    .cpf-benefit-item p strong {
+        color: #e52d27 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Compteur de devis */
+    .cpf-devis-count {
+        text-align: center !important;
+        font-size: 0.8rem !important;
+        color: #10b981 !important;
+        margin-top: 0.75rem !important;
+        font-weight: 500 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    
+    .cpf-devis-count svg {
+        margin-right: 4px !important;
+    }
+    
+    /* Barre de progression */
+    .cpf-progress-bar {
+        margin: 0.75rem 0 !important;
+        height: 0.35rem !important;
+    }
+    
+    /* Indicateurs d'étape */
+    .cpf-steps-indicator {
+        margin-bottom: 0.75rem !important;
+    }
+    
+    /* Sections de formulaire */
+    .cpf-form-section {
+        padding: 0.75rem 1rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Titres des sections */
+    .cpf-form-section h3 {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Groupes de formulaire */
+    .cpf-form-group {
+        flex: 1 1 100% !important;
+        margin-bottom: 0.5rem !important;
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Champs de formulaire */
+    .cpf-form-input, 
+    .cpf-form-textarea, 
+    .cpf-form-select {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Boutons */
+    .cpf-form-buttons {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        width: 100% !important;
+    }
+    
+    .cpf-btn {
+        width: 100% !important;
+        margin: 0.25rem 0 !important;
+        padding: 0.75rem 1rem !important;
+        min-width: 150px !important;
+    }
+}
+
+/* Styles pour très petits écrans */
+@media (max-width: 480px) {
+    /* Conteneur principal */
+    .cpf-container {
+        padding: 1rem !important;
+        border-radius: 0.5rem !important;
+    }
+    
+    /* Sections */
+    .cpf-form-section {
+        padding: 0.75rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Bannière de bénéfices */
+    .cpf-benefits-banner {
+        padding: 0.75rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Icônes de bénéfice */
+    .cpf-benefit-icon {
+        width: 2rem !important;
+        height: 2rem !important;
+        margin-right: 0.5rem !important;
+    }
+    
+    /* Icônes SVG */
+    .cpf-benefit-icon svg {
+        width: 16px !important;
+        height: 16px !important;
+    }
+    
+    /* Texte des bénéfices */
+    .cpf-benefit-item p {
+        font-size: 0.8rem !important;
+    }
+    
+    /* Titres */
+    .cpf-text-xl {
+        font-size: 1.125rem !important;
+    }
+    
+    .cpf-text-lg {
+        font-size: 1rem !important;
+    }
+    
+    /* Étapes */
+    .cpf-steps-indicator {
+        gap: 0.5rem !important;
+    }
+    
+    .cpf-step-number {
+        width: 1.75rem !important;
+        height: 1.75rem !important;
+        font-size: 0.75rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+}
+
+/* Correctifs pour iOS */
+@supports (-webkit-touch-callout: none) {
+    .cpf-form-input, 
+    .cpf-form-textarea, 
+    .cpf-form-select {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        border-radius: 0.75rem !important;
+    }
+    
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* Style du compteur de devis existant */
+.cpf-text-center.cpf-mt-3.cpf-text-sm {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin-top: 0.75rem !important;
+    color: #10b981 !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    /* S'assurer qu'il n'y a qu'une seule instance visible */
+    margin-bottom: 1rem !important;
+}
+
+/* Bordure supérieure de la bannière */
+.cpf-benefits-banner::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 3px !important;
+    background: linear-gradient(90deg, #e52d27, #10b981) !important;
+}

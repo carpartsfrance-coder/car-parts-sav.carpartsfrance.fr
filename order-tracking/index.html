@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suivi de commande | Car Parts France</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAI7PusdeWc8VZ8C4D4ew3Efr2E1V9LG2vxp72Ikg2klUw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    :root {
+      --primary:#dc3545;
+      --primary-light:rgba(220,53,69,0.12);
+      --secondary:#334155;
+      --bg:#f4f6f8;
+      --card-bg:#ffffff;
+      --border:#e2e8f0;
+      --text:#0f172a;
+      --text-muted:#64748b;
+      --success:#22c55e;
+      --warning:#f59e0b;
+      --radius:14px;
+      --shadow:0 18px 45px rgba(15,23,42,0.08);
+    }
+
+    *, *::before, *::after { box-sizing:border-box; }
+
+    body {
+      margin:0;
+      min-height:100vh;
+      font-family:'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background:linear-gradient(180deg,#fdf2f8 0%, #f8fafc 35%, #f1f5f9 100%);
+      color:var(--text);
+    }
+
+    main {
+      max-width:1080px;
+      margin:0 auto;
+      padding:48px 20px 80px;
+      display:flex;
+      flex-direction:column;
+      gap:32px;
+    }
+
+    header.hero {
+      text-align:center;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+
+    header.hero h1 {
+      font-size:clamp(2rem, 3vw, 2.75rem);
+      margin:0;
+      color:var(--secondary);
+      font-weight:700;
+    }
+
+    header.hero p {
+      margin:0 auto;
+      max-width:640px;
+      font-size:1.05rem;
+      color:var(--text-muted);
+      line-height:1.6;
+    }
+
+    section.card {
+      background:var(--card-bg);
+      border-radius:var(--radius);
+      padding:28px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(51,65,85,0.06);
+    }
+
+    .search-card {
+      display:grid;
+      gap:18px;
+    }
+
+    .search-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+      gap:18px;
+    }
+
+    .field {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .field label {
+      font-weight:600;
+      color:var(--secondary);
+      font-size:0.95rem;
+    }
+
+    .field input, .field textarea {
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px 16px;
+      font-size:1rem;
+      transition:border-color .2s, box-shadow .2s;
+      background:#f8fafc;
+    }
+
+    .field input:focus, .field textarea:focus {
+      outline:none;
+      border-color:var(--primary);
+      box-shadow:0 0 0 4px rgba(220,53,69,0.12);
+      background:#fff;
+    }
+
+    .field small {
+      color:var(--text-muted);
+      font-size:0.85rem;
+    }
+
+    .search-actions {
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      align-items:center;
+    }
+
+    button.primary {
+      background:var(--primary);
+      color:#fff;
+      border:none;
+      border-radius:999px;
+      padding:12px 28px;
+      font-size:1rem;
+      font-weight:600;
+      cursor:pointer;
+      transition:transform .2s, box-shadow .2s;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    button.primary:hover {
+      transform:translateY(-1px);
+      box-shadow:0 10px 25px rgba(220,53,69,0.25);
+    }
+
+    button.primary:disabled {
+      cursor:wait;
+      opacity:0.7;
+      transform:none;
+      box-shadow:none;
+    }
+
+    .tips {
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      font-size:0.95rem;
+      color:var(--text-muted);
+    }
+
+    .tips i { color:var(--primary); margin-top:4px; }
+
+    .feedback {
+      display:none;
+      border-radius:var(--radius);
+      padding:14px 18px;
+      border:1px solid transparent;
+      font-weight:500;
+      background:#fff;
+      box-shadow:var(--shadow);
+    }
+
+    .feedback.visible { display:flex; align-items:center; gap:12px; }
+    .feedback span { flex:1; }
+
+    .feedback--error { border-color:rgba(220,53,69,0.32); background:rgba(220,53,69,0.08); color:#991b1b; }
+    .feedback--info { border-color:rgba(37,99,235,0.2); background:#eff6ff; color:#1d4ed8; }
+    .feedback--success { border-color:rgba(34,197,94,0.3); background:rgba(34,197,94,0.1); color:#166534; }
+
+    .loader {
+      display:none;
+      justify-content:center;
+      align-items:center;
+      gap:12px;
+      color:var(--text-muted);
+      font-weight:500;
+    }
+
+    .loader.visible { display:flex; }
+    .loader i { animation:spin 1s linear infinite; color:var(--primary); }
+
+    @keyframes spin { from { transform:rotate(0); } to { transform:rotate(360deg); } }
+
+    .summary-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+      gap:22px;
+      margin-top:18px;
+    }
+
+    .summary-block {
+      border:1px solid rgba(148,163,184,0.22);
+      border-radius:var(--radius);
+      padding:20px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      background:#fff;
+    }
+
+    .summary-block header {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-weight:600;
+      color:var(--secondary);
+    }
+
+    .summary-block header i { color:var(--primary); }
+
+    .summary-block dl {
+      margin:0;
+      display:grid;
+      grid-template-columns:auto 1fr;
+      gap:6px 12px;
+      font-size:0.95rem;
+      color:var(--text-muted);
+    }
+
+    .summary-block dt { font-weight:600; color:var(--secondary); }
+    .summary-block dd { margin:0; color:var(--text); }
+
+    .items-list {
+      margin:18px 0 0;
+      border:1px dashed rgba(148,163,184,0.4);
+      border-radius:var(--radius);
+      padding:16px;
+      background:rgba(248,250,252,0.6);
+    }
+
+    .items-list ul {
+      list-style:none;
+      padding:0;
+      margin:0;
+      display:grid;
+      gap:10px;
+    }
+
+    .items-list li {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      border-radius:12px;
+      background:#fff;
+      border:1px solid rgba(226,232,240,0.6);
+      font-size:0.95rem;
+    }
+
+    .timeline {
+      margin-top:26px;
+      position:relative;
+      padding-left:26px;
+      display:grid;
+      gap:20px;
+    }
+
+    .timeline::before {
+      content:'';
+      position:absolute;
+      left:11px;
+      top:0;
+      bottom:0;
+      width:2px;
+      background:linear-gradient(180deg, rgba(148,163,184,0.4), rgba(148,163,184,0.05));
+    }
+
+    .timeline-entry {
+      position:relative;
+      background:#fff;
+      border-radius:var(--radius);
+      padding:16px 18px;
+      border:1px solid rgba(148,163,184,0.25);
+      box-shadow:0 15px 35px rgba(15,23,42,0.06);
+    }
+
+    .timeline-entry::before {
+      content:'';
+      position:absolute;
+      left:-20px;
+      top:22px;
+      width:14px;
+      height:14px;
+      border-radius:50%;
+      background:#fff;
+      border:3px solid var(--primary);
+      box-shadow:0 0 0 4px rgba(220,53,69,0.15);
+    }
+
+    .timeline-entry header {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .tag {
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 12px;
+      border-radius:999px;
+      background:var(--primary-light);
+      color:var(--primary);
+      font-weight:600;
+      font-size:0.85rem;
+    }
+
+    .date {
+      color:var(--text-muted);
+      font-size:0.9rem;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .contact-card form {
+      display:grid;
+      gap:18px;
+    }
+
+    .contact-actions {
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .note {
+      background:rgba(79,70,229,0.08);
+      border-radius:var(--radius);
+      padding:16px 18px;
+      color:#312e81;
+      border:1px solid rgba(79,70,229,0.18);
+      font-size:0.95rem;
+    }
+
+    .hidden { display:none !important; }
+
+    @media (max-width:720px) {
+      main { padding-top:32px; }
+      section.card { padding:22px; }
+      .timeline { padding-left:20px; }
+      .timeline-entry::before { left:-18px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <h1>Suivez votre commande en toute simplicité</h1>
+      <p>Renseignez votre numéro de commande ou votre numéro de suivi. Nous affichons instantanément l'état de préparation, l'expédition ainsi que les différentes étapes déjà franchies.</p>
+    </header>
+
+    <section class="card search-card" aria-labelledby="tracking-search-title">
+      <div>
+        <h2 id="tracking-search-title" style="margin:0;font-size:1.35rem;color:var(--secondary);font-weight:600;">Rechercher ma commande</h2>
+      </div>
+      <div class="search-grid">
+        <div class="field">
+          <label for="order-number-input">Numéro de commande</label>
+          <input id="order-number-input" name="order-number" type="text" placeholder="Ex. CPF-2025-00123" autocomplete="off" inputmode="latin" />
+          <small>Facultatif si vous avez déjà le numéro de suivi.</small>
+        </div>
+        <div class="field">
+          <label for="tracking-number-input">Numéro de suivi colis</label>
+          <input id="tracking-number-input" name="tracking-number" type="text" placeholder="Ex. 1Z999AA10123456784" autocomplete="off" />
+          <small>Facultatif si vous n'avez que le numéro de commande.</small>
+        </div>
+      </div>
+      <div class="search-actions">
+        <button id="search-button" class="primary" type="button"><i class="fas fa-search"></i> Lancer la recherche</button>
+        <div class="tips"><i class="fas fa-lightbulb"></i><span>Vous pouvez saisir l'un ou l'autre des numéros. Si vous indiquez les deux, nous vérifions qu'ils correspondent pour davantage de sécurité.</span></div>
+      </div>
+    </section>
+
+    <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+    <div id="loader" class="loader" role="alert" aria-live="assertive"><i class="fas fa-spinner"></i> Recherche en cours...</div>
+
+    <section id="result-section" class="card hidden" aria-live="polite">
+      <header style="display:flex;flex-direction:column;gap:6px;">
+        <span class="tag"><i class="fas fa-box"></i> Commande trouvée</span>
+        <h2 style="margin:0;font-size:1.4rem;">Synthèse de votre commande</h2>
+        <p id="result-last-update" style="margin:0;color:var(--text-muted);"></p>
+      </header>
+
+      <div class="summary-grid">
+        <article class="summary-block">
+          <header><i class="fas fa-receipt"></i><span>Commande</span></header>
+          <dl>
+            <dt>Numéro</dt><dd id="summary-order-number">—</dd>
+            <dt>Statut</dt><dd id="summary-status">—</dd>
+            <dt>Créée le</dt><dd id="summary-created">—</dd>
+            <dt>Source</dt><dd id="summary-provider">—</dd>
+          </dl>
+        </article>
+        <article class="summary-block">
+          <header><i class="fas fa-user"></i><span>Client</span></header>
+          <dl>
+            <dt>Nom</dt><dd id="summary-customer-name">—</dd>
+            <dt>Email</dt><dd id="summary-customer-email">—</dd>
+            <dt>Téléphone</dt><dd id="summary-customer-phone">—</dd>
+          </dl>
+        </article>
+        <article class="summary-block">
+          <header><i class="fas fa-truck"></i><span>Expédition</span></header>
+          <dl>
+            <dt>Transporteur</dt><dd id="summary-carrier">—</dd>
+            <dt>Suivi</dt><dd id="summary-tracking">—</dd>
+            <dt>Expédiée le</dt><dd id="summary-shipped">—</dd>
+            <dt>Livraison estimée</dt><dd id="summary-estimated">—</dd>
+          </dl>
+        </article>
+      </div>
+
+      <div class="items-list" id="items-block">
+        <strong style="display:block;margin-bottom:8px;color:var(--secondary);">Produits concernés</strong>
+        <ul id="items-list"></ul>
+      </div>
+
+      <section style="margin-top:32px;">
+        <h3 style="margin-bottom:16px;color:var(--secondary);">Historique des étapes</h3>
+        <div id="timeline" class="timeline"></div>
+      </section>
+    </section>
+
+    <section id="contact-section" class="card contact-card hidden" aria-labelledby="contact-title">
+      <div>
+        <h2 id="contact-title" style="margin:0 0 4px 0;font-size:1.35rem;color:var(--secondary);">Besoin d'ajouter une précision ?</h2>
+        <p style="margin:0;color:var(--text-muted);">Votre message est directement transmis à notre équipe SAV. Nous répondons dans les meilleurs délais.</p>
+      </div>
+      <form id="contact-form">
+        <div class="field">
+          <label for="contact-email">Adresse e-mail (facultative)</label>
+          <input type="email" id="contact-email" placeholder="prenom.nom@email.com" autocomplete="email" />
+          <small>Si vous la renseignez, nous pourrons vous répondre sur cette adresse.</small>
+        </div>
+        <div class="field">
+          <label for="contact-message">Votre message à notre équipe *</label>
+          <textarea id="contact-message" rows="5" maxlength="1000" placeholder="Expliquez-nous votre besoin ou ajoutez des précisions utiles."></textarea>
+          <small id="message-counter">0 / 1000 caractères</small>
+        </div>
+        <div class="contact-actions">
+          <button type="submit" class="primary" id="contact-submit"><i class="fas fa-paper-plane"></i> Envoyer mon message</button>
+          <span class="note" id="contact-note">Merci de partager un maximum de détails pour que notre équipe puisse accélérer le traitement.</span>
+        </div>
+      </form>
+    </section>
+  </main>
+  <script src="./tracking.js" defer></script>
+</body>
+</html>

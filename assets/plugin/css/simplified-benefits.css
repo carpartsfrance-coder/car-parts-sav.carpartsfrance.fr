@@ -1,0 +1,128 @@
+/* Styles pour le bandeau de bénéfices simplifié */
+
+.cpf-benefits-banner {
+    background: #ffffff !important;
+    border-radius: 0.75rem !important;
+    padding: 1rem !important;
+    margin-bottom: 1.5rem !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    border: 1px solid #f3f4f6 !important;
+    position: relative !important;
+}
+
+.cpf-benefits-grid {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 0.5rem !important;
+}
+
+.cpf-benefit-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    padding: 0.75rem 1rem !important;
+    background-color: #f9fafb !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    width: auto !important;
+    margin: 0 auto !important;
+}
+
+.cpf-benefit-icon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    background: linear-gradient(135deg, #f9fafb, #ffffff) !important;
+    border-radius: 50% !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05) !important;
+    color: #e52d27 !important;
+    border: 1px solid rgba(229, 45, 39, 0.2) !important;
+}
+
+.cpf-benefit-icon svg {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+    stroke: currentColor !important;
+    stroke-width: 2 !important;
+}
+
+.cpf-benefit-item p {
+    margin: 0 !important;
+    font-size: 0.95rem !important;
+    color: #4b5563 !important;
+}
+
+.cpf-benefit-item strong {
+    color: #1f2937 !important;
+    font-weight: 600 !important;
+}
+
+/* Styles pour mobile */
+@media (max-width: 768px) {
+    .cpf-benefits-banner {
+        padding: 0.5rem !important;
+        margin-bottom: 1rem !important;
+        border-radius: 0.65rem !important;
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.03) !important;
+    }
+    
+    .cpf-benefits-grid {
+        padding: 0.25rem !important;
+    }
+    
+    .cpf-benefit-item {
+        padding: 0.6rem 0.85rem !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        background: linear-gradient(145deg, #ffffff, #f9fafb) !important;
+    }
+    
+    .cpf-benefit-icon {
+        width: 2rem !important;
+        height: 2rem !important;
+        margin-right: 0.6rem !important;
+        background: white !important;
+        box-shadow: 0 2px 4px rgba(229, 45, 39, 0.1) !important;
+    }
+    
+    .cpf-benefit-icon svg {
+        width: 1rem !important;
+        height: 1rem !important;
+    }
+    
+    .cpf-benefit-item p {
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        margin: 0 !important;
+    }
+    
+    .cpf-benefit-item strong {
+        color: #e52d27 !important;
+    }
+}
+
+/* Styles pour très petits écrans */
+@media (max-width: 480px) {
+    .cpf-benefit-item {
+        padding: 0.5rem 0.75rem !important;
+    }
+    
+    .cpf-benefit-icon {
+        width: 2rem !important;
+        height: 2rem !important;
+    }
+    
+    .cpf-benefit-icon svg {
+        width: 1rem !important;
+        height: 1rem !important;
+    }
+    
+    .cpf-benefit-item p {
+        font-size: 0.85rem !important;
+    }
+}
