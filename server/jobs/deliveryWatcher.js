@@ -121,7 +121,7 @@ async function runDeliveryScanOnce() {
         if (hasDelivered) {
           const trackingNumber = idToTracking.get(orderId) || '';
           await Order.updateOne(
-            { provider: 'woocommerce', providerOrderId: orderId },
+            { provider: 'woocommerce', providerOrderId: orderId, status: { $nin: ['delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed','delivered'] } },
             {
               $set: { status: 'delivered_awaiting_deposit' },
               $push: {

@@ -408,15 +408,10 @@ async function rebuildTechnicalRefsInternal() {
     const current = !!(doc.meta && doc.meta.technicalRefRequired);
     doc.meta = doc.meta || {};
     if (needs && !current) {
+      // Activer seulement si nécessaire; ne JAMAIS désactiver automatiquement pour respecter un choix manuel
       doc.meta.technicalRefRequired = true;
       doc.events = doc.events || [];
       doc.events.push({ type: 'technical_ref_required_set', message: 'Référence technique requise (rétroactif auto)', at: new Date() });
-      await doc.save();
-      updated++;
-    } else if (!needs && current) {
-      doc.meta.technicalRefRequired = false;
-      doc.events = doc.events || [];
-      doc.events.push({ type: 'technical_ref_required_set', message: 'Référence technique non requise (rétroactif auto)', at: new Date() });
       await doc.save();
       updated++;
     }
@@ -702,6 +697,13 @@ async function syncWooAllOrders() {
         if (trackingNumber && !['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'].includes(internalStatus)) {
           statusToSet = 'fulfilled';
         }
+        // Ne jamais écraser un statut final déjà présent en base
+        const finals = ['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'];
+        let existingOrder = null;
+        try { existingOrder = await Order.findOne({ provider: 'woocommerce', providerOrderId: wooId }, { status: 1, 'meta.vinOrPlate': 1 }).lean(); } catch(_) {}
+        if (existingOrder && finals.includes(existingOrder.status)) {
+          statusToSet = existingOrder.status;
+        }
 
         const update = {
           provider: 'woocommerce',
@@ -732,9 +734,12 @@ async function syncWooAllOrders() {
           } catch { /* ignore */ }
         }
         if (vinMeta && vinMeta.value) {
-          update['meta.vinOrPlate'] = vinMeta.value;
-          if (vinMeta.key) update['meta.wooVinMetaKey'] = vinMeta.key;
-          if (vinMeta.id) update['meta.wooVinMetaId'] = String(vinMeta.id);
+          const hasManualVin = !!(existingOrder && existingOrder.meta && existingOrder.meta.vinOrPlate && String(existingOrder.meta.vinOrPlate).trim());
+          if (!hasManualVin) {
+            update['meta.vinOrPlate'] = vinMeta.value;
+            if (vinMeta.key) update['meta.wooVinMetaKey'] = vinMeta.key;
+            if (vinMeta.id) update['meta.wooVinMetaId'] = String(vinMeta.id);
+          }
         }
         const setOnInsert = wooCreated ? { createdAt: wooCreated } : {};
         // Définir le flag de référence technique requise uniquement à la création (respect du toggle manuel ensuite)
@@ -1330,6 +1335,13 @@ async function syncWooRecentOrders() {
       if (trackingNumber2 && !['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'].includes(internalStatus)) {
         statusToSet2 = 'fulfilled';
       }
+      // Ne jamais écraser un statut final déjà présent en base
+      const finals2 = ['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'];
+      let existingOrder2 = null;
+      try { existingOrder2 = await Order.findOne({ provider: 'woocommerce', providerOrderId: wooId }, { status: 1, 'meta.vinOrPlate': 1 }).lean(); } catch(_) {}
+      if (existingOrder2 && finals2.includes(existingOrder2.status)) {
+        statusToSet2 = existingOrder2.status;
+      }
 
       const update = {
         provider: 'woocommerce',
@@ -1360,9 +1372,12 @@ async function syncWooRecentOrders() {
         } catch { /* ignore */ }
       }
       if (vinMeta2 && vinMeta2.value) {
-        update['meta.vinOrPlate'] = vinMeta2.value;
-        if (vinMeta2.key) update['meta.wooVinMetaKey'] = vinMeta2.key;
-        if (vinMeta2.id) update['meta.wooVinMetaId'] = String(vinMeta2.id);
+        const hasManualVin2 = !!(existingOrder2 && existingOrder2.meta && existingOrder2.meta.vinOrPlate && String(existingOrder2.meta.vinOrPlate).trim());
+        if (!hasManualVin2) {
+          update['meta.vinOrPlate'] = vinMeta2.value;
+          if (vinMeta2.key) update['meta.wooVinMetaKey'] = vinMeta2.key;
+          if (vinMeta2.id) update['meta.wooVinMetaId'] = String(vinMeta2.id);
+        }
       }
       const setOnInsert = wooCreated ? { createdAt: wooCreated } : {};
       try {
