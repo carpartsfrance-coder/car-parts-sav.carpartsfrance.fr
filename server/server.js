@@ -3326,9 +3326,75 @@ app.get('/api/admin/tickets/:ticketId', authenticateAdmin, ensureAdminOrAgent, a
       ticket = await Ticket.findOne({ ticketNumber: ticketId }).lean();
     }
     if (!ticket) return res.status(404).json({ success: false, message: 'Ticket non trouvé' });
-    return res.json({ success: true, ticket });
+    // Charger aussi l'historique des statuts pour la timeline/conversation
+    const statusHistory = await StatusUpdate.find({ ticketId: ticket._id })
+      .sort({ updatedAt: 1, _id: 1 })
+      .lean();
+    return res.json({ success: true, ticket, statusHistory });
   } catch (e) {
     console.error('[tickets:detail] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Mettre à jour le statut d'un ticket (avec historique) et option d'email au client
+app.post('/api/admin/tickets/:ticketId/status', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const ticketIdParam = String(req.params.ticketId || '').trim();
+    let ticket = null;
+    if (mongoose.Types.ObjectId.isValid(ticketIdParam)) {
+      ticket = await Ticket.findById(ticketIdParam);
+    }
+    if (!ticket && ticketIdParam) {
+      ticket = await Ticket.findOne({ ticketNumber: ticketIdParam });
+    }
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket non trouvé' });
+
+    const body = req.body || {};
+    const status = String(body.status || '').trim();
+    const allowed = ['nouveau','en_analyse','info_complementaire','validé','refusé','en_cours_traitement','expédié','clôturé'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Statut invalide' });
+    }
+
+    const comment = typeof body.comment === 'string' ? body.comment : '';
+    const additionalInfoRequested = typeof body.additionalInfoRequested === 'string' ? body.additionalInfoRequested : '';
+    const clientNotified = !!body.clientNotified;
+    const priority = body.priority ? String(body.priority).trim() : '';
+
+    // Enregistrer l'historique
+    const updatedBy = (req.auth && (req.auth.email || req.auth.username)) ? (req.auth.email || req.auth.username) : 'admin';
+    const hist = new StatusUpdate({
+      ticketId: ticket._id,
+      status,
+      comment,
+      updatedBy,
+      clientNotified: clientNotified === true,
+      additionalInfoRequested: additionalInfoRequested || undefined
+    });
+    await hist.save();
+
+    // Mettre à jour le ticket
+    ticket.currentStatus = status;
+    if (priority) ticket.priority = priority;
+    await ticket.save();
+
+    // Envoyer l'email si demandé
+    if (clientNotified) {
+      try {
+        const plainTicket = typeof ticket.toObject === 'function' ? ticket.toObject() : ticket;
+        await sendStatusUpdateEmail(plainTicket, status, comment);
+      } catch (mailErr) {
+        console.warn('[tickets:status] échec envoi email:', mailErr && mailErr.message ? mailErr.message : mailErr);
+      }
+    }
+
+    const statusHistory = await StatusUpdate.find({ ticketId: ticket._id })
+      .sort({ updatedAt: 1, _id: 1 })
+      .lean();
+    return res.json({ success: true, ticket, statusHistory });
+  } catch (e) {
+    console.error('[tickets:status] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -3341,6 +3407,43 @@ app.get('/api/admin/tickets/awaiting-agent-response', authenticateAdmin, ensureA
     return res.json({ success: true, count: 0, tickets: [] });
   } catch (e) {
     console.error('[tickets:awaiting] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Polling minimal des mises à jour côté client (stub)
+app.get('/api/admin/tickets/client-updates', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const sinceIso = String(req.query.since || '').trim();
+    // Version minimale: pas d'agrégation complexe, renvoyer une liste vide pour supprimer les 404
+    return res.json({ success: true, updates: [], since: sinceIso || new Date().toISOString() });
+  } catch (e) {
+    console.error('[tickets:client-updates] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Notifications (liste paginée minimale)
+app.get('/api/admin/notifications', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const skip = (page - 1) * limit;
+    const filter = {};
+    if (req.auth && req.auth.id) filter.userId = req.auth.id;
+    let total = 0; let notifications = [];
+    try { total = await Notification.countDocuments(filter); } catch(_) { total = 0; }
+    try {
+      notifications = await Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    } catch(_) { notifications = []; }
+    const pages = Math.max(1, Math.ceil((total || 0) / limit));
+    return res.json({ success: true, notifications, pagination: { page, limit, pages, total } });
+  } catch (e) {
+    console.error('[notifications:list] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
