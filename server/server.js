@@ -2652,6 +2652,55 @@ app.get('/api/admin/orders/:id', authenticateAdmin, ensureAdminOrAgent, async (r
   }
 });
 
+app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const body = req.body || {};
+    const carrier = String(body.carrier || '').trim();
+    const trackingNumber = String(body.trackingNumber || '').trim();
+    const shippedAtRaw = String(body.shippedAt || '').trim();
+    if (!carrier || !trackingNumber) return res.status(400).json({ success: false, message: 'Transporteur et numéro de suivi requis' });
+    order.shipping = order.shipping || {};
+    order.shipping.carrier = carrier;
+    order.shipping.trackingNumber = trackingNumber;
+    if (shippedAtRaw) {
+      const d = new Date(shippedAtRaw);
+      if (!isNaN(d.getTime())) order.shipping.shippedAt = d;
+    }
+    if (!order.shipping.shippedAt) order.shipping.shippedAt = new Date();
+    order.status = 'fulfilled';
+    order.events = Array.isArray(order.events) ? order.events : [];
+    order.events.push({ type: 'order_shipped', message: 'Commande expédiée', payloadSnippet: { carrier: order.shipping.carrier || '', trackingNumber: order.shipping.trackingNumber || '' } });
+    await order.save();
+    return res.json({ success: true, order });
+  } catch (e) {
+    console.error('[orders:ship] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/admin/orders/:id/notes', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const message = String((req.body && req.body.message) || '').trim();
+    if (!message) return res.status(400).json({ success: false, message: 'Message requis' });
+    order.events = Array.isArray(order.events) ? order.events : [];
+    order.events.push({ type: 'note', message, at: new Date(), payloadSnippet: { author: (req.auth && (req.auth.email || req.auth.id)) || '' } });
+    order.meta = order.meta || {};
+    if (!Array.isArray(order.meta.notes)) order.meta.notes = [];
+    order.meta.notes.push(message);
+    await order.save();
+    return res.json({ success: true, order });
+  } catch (e) {
+    console.error('[orders:notes:add] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Recalculer les références requises (rétroactif) sur toutes les commandes existantes
 app.post('/api/admin/orders/rebuild-technical-refs', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
