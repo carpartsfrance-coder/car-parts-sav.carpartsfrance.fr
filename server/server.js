@@ -2701,6 +2701,88 @@ app.post('/api/admin/orders/:id/notes', authenticateAdmin, ensureAdminOrAgent, a
   }
 });
 
+// Créer une commande (manuelle, virement, etc.)
+app.post('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const b = req.body || {};
+    // Provider sécurisé
+    const allowedProviders = new Set(['woocommerce','mollie','bank_transfer','manual']);
+    const provider = allowedProviders.has(String(b.provider || '').trim()) ? String(b.provider).trim() : 'manual';
+    // Client
+    const customer = {
+      name: String(b.customer?.name || ''),
+      email: String(b.customer?.email || ''),
+      phone: String(b.customer?.phone || '')
+    };
+    if (!customer.email) return res.status(400).json({ success: false, message: 'Email client requis' });
+    // Articles
+    const items = Array.isArray(b.items) ? b.items
+      .map(it => ({
+        sku: String(it.sku || ''),
+        name: String(it.name || ''),
+        qty: Number(it.qty || 0),
+        unitPrice: Number(it.unitPrice || 0)
+      })) : [];
+    if (!items.some(it => it.qty > 0 && it.unitPrice > 0)) {
+      return res.status(400).json({ success: false, message: 'Ajouter au moins un article valide' });
+    }
+    // Totaux (recalcul côté serveur)
+    const currency = String(b.totals?.currency || 'EUR').trim() || 'EUR';
+    const shipping = Number(b.totals?.shipping || 0) || 0;
+    const tax = Number(b.totals?.tax || 0) || 0;
+    const itemsSum = items.reduce((acc, it) => acc + (Math.max(0, it.qty) * Math.max(0, it.unitPrice)), 0);
+    const amount = itemsSum + shipping + tax;
+    // Adresses
+    const billingAddr = b.billing?.address && typeof b.billing.address === 'object' ? b.billing.address : null;
+    const shippingAddr = b.shipping?.address && typeof b.shipping.address === 'object' ? b.shipping.address : null;
+    // Livraison estimée
+    let estimatedDeliveryAt = undefined;
+    if (b.shipping && typeof b.shipping.estimatedDeliveryAt === 'string') {
+      const raw = b.shipping.estimatedDeliveryAt.trim();
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T00:00:00.000Z` : raw;
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) estimatedDeliveryAt = d;
+    }
+    // Meta
+    const meta = Object.assign({}, b.meta || {});
+    if (typeof meta.vinOrPlate === 'string') meta.vinOrPlate = meta.vinOrPlate.trim();
+    // Statut & paiement
+    const markPaid = !!b.markPaid;
+    let status = markPaid ? 'paid' : 'processing';
+    const payment = {};
+    if (markPaid) {
+      payment.method = provider === 'bank_transfer' ? 'bank_transfer' : 'manual';
+      payment.paidAt = new Date();
+    }
+    // Création
+    const doc = new Order({
+      provider,
+      number: b.number ? String(b.number) : undefined,
+      status,
+      customer,
+      totals: { currency, amount, shipping, tax },
+      items,
+      payment,
+      ...(billingAddr ? { billing: { address: billingAddr } } : {}),
+      ...(shippingAddr || estimatedDeliveryAt ? { shipping: { address: shippingAddr || undefined, estimatedDeliveryAt } } : {}),
+      meta
+    });
+    // Assurer une valeur unique pour providerOrderId sur les créations manuelles
+    if (!doc.providerOrderId && provider !== 'woocommerce') {
+      try { doc.providerOrderId = doc._id ? String(doc._id) : String(new mongoose.Types.ObjectId()); }
+      catch(_) { doc.providerOrderId = String(Date.now()); }
+    }
+    doc.events = Array.isArray(doc.events) ? doc.events : [];
+    doc.events.push({ type: 'order_created_manual', message: 'Commande créée manuellement', at: new Date(), payloadSnippet: { provider } });
+    if (markPaid) doc.events.push({ type: 'payment_marked_paid', message: 'Commande marquée payée', at: new Date(), payloadSnippet: { method: payment.method || '' } });
+    await doc.save();
+    return res.json({ success: true, order: doc });
+  } catch (e) {
+    console.error('[orders:create] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Recalculer les références requises (rétroactif) sur toutes les commandes existantes
 app.post('/api/admin/orders/rebuild-technical-refs', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {

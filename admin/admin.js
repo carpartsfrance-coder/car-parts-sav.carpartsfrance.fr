@@ -127,8 +127,8 @@ function openEditOrderModal(orderId) {
         root.innerHTML = '';
         const modal = document.createElement('div');
         modal.className = 'cpf-modal';
-        modal.style.maxWidth = '1024px';
-        modal.style.width = '95vw';
+        modal.style.maxWidth = '1120px';
+        modal.style.width = '96vw';
         modal.style.maxHeight = '90vh';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
@@ -6345,6 +6345,10 @@ async function checkAuth() {
         modal.style.maxHeight = '90vh';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
+        // Styles essentiels pour rendre le fond/contour visible
+        modal.style.background = '#ffffff';
+        modal.style.borderRadius = '12px';
+        modal.style.boxShadow = '0 12px 30px rgba(0,0,0,0.25)';
         modal.innerHTML = `
           <div class="cpf-modal-header">
             <div class="icon"><i class="fas fa-cart-plus"></i></div>
@@ -6352,7 +6356,7 @@ async function checkAuth() {
           </div>
           <div class="cpf-modal-body co-order-modal-body">
             <style>
-              .co-order-modal-body { flex: 1; overflow: auto; padding-right: 4px; }
+              .co-order-modal-body { flex:1; overflow:auto; padding:20px; background:#f8fafc; }
               .co-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
               .co-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
               .co-section { margin-top:10px; }
