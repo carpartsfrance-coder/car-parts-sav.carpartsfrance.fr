@@ -2562,6 +2562,19 @@ app.delete('/api/admin/orders/:id', authenticateAdmin, ensureAdmin, async (req, 
   }
 });
 
+app.post('/api/admin/orders/bulk-delete', authenticateAdmin, ensureAdmin, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(v => String(v)) : [];
+    const valid = ids.filter(id => /^[0-9a-fA-F]{24}$/.test(id));
+    if (!valid.length) return res.status(400).json({ success: false, message: 'Aucun ID valide fourni' });
+    const result = await Order.deleteMany({ _id: { $in: valid } });
+    return res.json({ success: true, deleted: (result && result.deletedCount) ? result.deletedCount : 0 });
+  } catch (e) {
+    console.error('[orders:bulk-delete] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Lister les commandes (pagination + filtres de base)
 app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
