@@ -2353,9 +2353,71 @@ app.get('/api/tickets/:ticketNumber', async (req, res) => {
   } catch (error) {
     console.error('Erreur lors de la récupération du ticket:', error);
     res.status(500).json({
-      success: false,
-      message: 'Une erreur est survenue lors de la récupération du ticket'
+    success: false,
+    message: 'Une erreur est survenue lors de la récupération du ticket'
+  });
+}
+});
+
+app.post('/api/tickets/additional-info', upload.array('files', 10), async (req, res) => {
+  try {
+    const ticketNumber = String(req.body.ticketNumber || '').trim();
+    const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!ticketNumber) {
+      return res.status(400).json({ success: false, message: 'Numéro de ticket requis' });
+    }
+    if (!message && files.length === 0) {
+      return res.status(400).json({ success: false, message: 'Message ou fichiers requis' });
+    }
+    const ticket = await Ticket.findOne({ ticketNumber });
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket non trouvé' });
+    }
+    if (files.length > 0) {
+      for (const file of files) {
+        let storedPath = '';
+        if (S3_ENABLED) {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+          const ext = path.extname(file.originalname);
+          const key = `${file.fieldname}-${uniqueSuffix}${ext}`;
+          try {
+            await uploadBuffer(key, file.mimetype, file.buffer);
+            storedPath = `/uploads/${key}`;
+          } catch (upErr) {
+            console.error('[upload] Erreur upload R2:', upErr && upErr.message ? upErr.message : upErr);
+            throw upErr;
+          }
+        } else {
+          storedPath = file.path;
+        }
+        ticket.documents.push({
+          type: 'documents_autres',
+          fileName: sanitizeFileName(file.originalname),
+          filePath: storedPath,
+          fileType: file.mimetype,
+          uploadedBy: 'client',
+          uploadDate: new Date()
+        });
+      }
+    }
+    await ticket.save();
+    const parts = [];
+    parts.push('Informations complémentaires reçues du client');
+    if (message) parts.push(`- ${message}`);
+    const comment = parts.join(': ');
+    const hist = new StatusUpdate({
+      ticketId: ticket._id,
+      status: ticket.currentStatus || 'nouveau',
+      comment,
+      updatedBy: 'client',
+      clientNotified: false
     });
+    await hist.save();
+    return res.json({ success: true, ticketNumber: ticket.ticketNumber });
+  } catch (e) {
+    console.error('Erreur lors de l\'ajout d\'informations complémentaires:', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
