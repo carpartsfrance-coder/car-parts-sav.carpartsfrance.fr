@@ -2344,9 +2344,19 @@ app.get('/api/tickets/:ticketNumber', async (req, res) => {
     const statusHistory = await StatusUpdate.find({ ticketId: ticket._id }).sort({ updatedAt: -1 });
     console.log(`${statusHistory.length} mises à jour de statut trouvées pour le ticket`);
     
+    const ticketObj = (typeof ticket.toObject === 'function') ? ticket.toObject() : ticket;
+    if (ticketObj && Array.isArray(ticketObj.documents)) {
+      ticketObj.documents = ticketObj.documents.map(d => {
+        const fp = d && d.filePath ? String(d.filePath) : '';
+        const base = fp.split('/').pop() || (d && d.fileName ? String(d.fileName) : '');
+        const publicUrl = base ? `/uploads/${base}` : '';
+        return { ...d, publicUrl };
+      });
+    }
+    
     res.status(200).json({
       success: true,
-      ticket,
+      ticket: ticketObj,
       statusHistory
     });
     

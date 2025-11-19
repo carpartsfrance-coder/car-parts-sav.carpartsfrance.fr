@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const isImage = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].some(ext => filenameLower.endsWith(ext));
                             const filePath = doc.filePath || '';
                             const fileNameOnly = filePath.split('/').pop();
-                            const publicUrl = fileNameOnly ? `/uploads/${fileNameOnly}` : '#';
+                            const publicUrl = (doc.publicUrl && typeof doc.publicUrl === 'string' && doc.publicUrl) || (fileNameOnly ? `/uploads/${fileNameOnly}` : '#');
 
                             if (isImage) {
                                 const img = document.createElement('img');
@@ -466,7 +466,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 img.alt = doc.originalFilename || doc.fileName || 'Image';
                                 thumb.appendChild(img);
                                 thumb.addEventListener('click', () => {
-                                    ensureModal();
                                     const modal = document.getElementById('image-modal');
                                     const modalImg = document.getElementById('modal-img');
                                     if (modal && modalImg) {
@@ -826,16 +825,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const documentThumbnail = document.createElement('div');
                 documentThumbnail.className = 'document-thumbnail';
 
-                const isImage = ['jpg', 'jpeg', 'png', 'gif'].some(ext =>
+                const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].some(ext =>
                     typeof doc.fileName === 'string' && doc.fileName.toLowerCase().endsWith(ext)
                 );
 
+                const fp = doc.filePath || '';
+                const fn = fp.split('/').pop();
+                const publicUrl = (doc.publicUrl && typeof doc.publicUrl === 'string' && doc.publicUrl) || (fn ? `/uploads/${fn}` : '#');
                 if (isImage) {
                     const img = document.createElement('img');
-                    const filePath = doc.filePath || '';
-                    const fileName = filePath.split('/').pop();
-                    img.src = `/uploads/${fileName}`;
-                    img.alt = fixMojibake(doc.originalFilename || doc.fileName || 'Image');
+                    img.src = publicUrl;
+                    img.alt = (doc.originalFilename || doc.fileName || 'Image');
                     documentThumbnail.appendChild(img);
 
                     documentThumbnail.addEventListener('click', () => {
@@ -843,9 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const modalImg = document.getElementById('modal-img');
                         if (modal && modalImg) {
                             modal.style.display = 'block';
-                            const fp = doc.filePath || '';
-                            const fn = fp.split('/').pop();
-                            modalImg.src = `/uploads/${fn}`;
+                            modalImg.src = publicUrl;
                         }
                     });
                 } else {
@@ -863,15 +861,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     documentThumbnail.appendChild(icon);
 
                     documentThumbnail.addEventListener('click', () => {
-                        const filePath = doc.filePath || '';
-                        const fileName = filePath.split('/').pop();
-                        window.open(`/uploads/${fileName}`, '_blank');
+                        if (publicUrl && publicUrl !== '#') window.open(publicUrl, '_blank');
                     });
                 }
 
                 const documentInfo = document.createElement('div');
                 documentInfo.className = 'document-info';
-                documentInfo.textContent = fixMojibake(doc.originalFilename || doc.fileName);
+                documentInfo.textContent = (doc.originalFilename || doc.fileName);
 
                 documentItem.appendChild(documentThumbnail);
                 documentItem.appendChild(documentInfo);
