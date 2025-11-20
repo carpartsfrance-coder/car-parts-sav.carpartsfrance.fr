@@ -1197,11 +1197,11 @@ async function syncWooRecentOrders() {
     const cs = (process.env.WOOCOMMERCE_CONSUMER_SECRET || '').trim();
     if (!base || !ck || !cs) return;
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const url = `${base.replace(/\/$/, '')}/wp-json/wc/v3/orders?after=${encodeURIComponent(since)}&per_page=20&orderby=date&order=desc`;
+    const url = `${base.replace(/\/$/, '')}/wp-json/wc/v3/orders?after=${encodeURIComponent(since)}&per_page=100&orderby=date&order=desc`;
     const headers2 = { 'Authorization': `Basic ${base64(`${ck}:${cs}`)}`, 'Accept': 'application/json', 'User-Agent': 'CarPartsSAV/1.0' };
     let resp = await fetch(url, { headers: headers2 });
     if (!resp.ok) {
-      const url2 = `${base.replace(/\/$/, '')}/wp-json/wc/v3/orders?consumer_key=${encodeURIComponent(ck)}&consumer_secret=${encodeURIComponent(cs)}&after=${encodeURIComponent(since)}&per_page=20&orderby=date&order=desc`;
+      const url2 = `${base.replace(/\/$/, '')}/wp-json/wc/v3/orders?consumer_key=${encodeURIComponent(ck)}&consumer_secret=${encodeURIComponent(cs)}&after=${encodeURIComponent(since)}&per_page=100&orderby=date&order=desc`;
       resp = await fetch(url2, { headers: { 'Accept': 'application/json', 'User-Agent': 'CarPartsSAV/1.0' } });
       if (!resp.ok) {
         await new Promise(r => setTimeout(r, 1000));
@@ -3611,6 +3611,37 @@ app.post('/api/admin/tickets/:ticketId/status', authenticateAdmin, ensureAdminOr
     return res.json({ success: true, ticket, statusHistory });
   } catch (e) {
     console.error('[tickets:status] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/admin/tickets/:ticketId/notes', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const ticketIdParam = String(req.params.ticketId || '').trim();
+    let ticket = null;
+    if (mongoose.Types.ObjectId.isValid(ticketIdParam)) {
+      ticket = await Ticket.findById(ticketIdParam);
+    }
+    if (!ticket && ticketIdParam) {
+      ticket = await Ticket.findOne({ ticketNumber: ticketIdParam });
+    }
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket non trouvé' });
+
+    const body = req.body || {};
+    const rawNotes = typeof body.notes === 'string' ? body.notes : (typeof body.internalNotes === 'string' ? body.internalNotes : '');
+    const notes = String(rawNotes || '').trim();
+    if (!notes) return res.status(400).json({ success: false, message: 'Notes requises' });
+
+    const prev = typeof ticket.internalNotes === 'string' ? ticket.internalNotes : '';
+    ticket.internalNotes = prev ? `${prev}\n${notes}` : notes;
+    await ticket.save();
+
+    const statusHistory = await StatusUpdate.find({ ticketId: ticket._id })
+      .sort({ updatedAt: 1, _id: 1 })
+      .lean();
+    return res.json({ success: true, ticket, statusHistory });
+  } catch (e) {
+    console.error('[tickets:notes] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
