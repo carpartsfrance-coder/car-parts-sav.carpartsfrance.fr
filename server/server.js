@@ -544,6 +544,69 @@ try {
   console.error('Impossible de créer le répertoire uploads:', e);
 }
 
+// Mapping des statuts WooCommerce vers le statut interne de l'outil
+function mapWooStatusToInternal(status) {
+  try {
+    const v = String(status || '').toLowerCase();
+    switch (v) {
+      case 'pending':
+      case 'pending payment':
+        return 'pending_payment';
+      case 'on-hold':
+      case 'on hold':
+        return 'awaiting_transfer';
+      case 'processing':
+        return 'processing';
+      case 'completed':
+        return 'delivered';
+      case 'refunded':
+        return 'refunded';
+      case 'cancelled':
+      case 'canceled':
+        return 'cancelled';
+      case 'failed':
+        return 'failed';
+      default:
+        return 'processing';
+    }
+  } catch {
+    return 'processing';
+  }
+}
+
+// Mapping des statuts Mollie vers le statut interne de l'outil
+function mapMollieStatusToInternal(status) {
+  try {
+    const v = String(status || '').toLowerCase();
+    switch (v) {
+      case 'open':
+        return 'pending_payment';
+      case 'authorized':
+        return 'paid';
+      case 'paid':
+        return 'paid';
+      case 'pending':
+        return 'awaiting_transfer';
+      case 'canceled':
+      case 'cancelled':
+        return 'cancelled';
+      case 'expired':
+        return 'failed';
+      case 'failed':
+        return 'failed';
+      case 'refunded':
+        return 'refunded';
+      case 'charged_back':
+      case 'chargeback':
+        return 'disputed';
+      default:
+        return 'processing';
+    }
+  } catch {
+    return 'processing';
+  }
+}
+
 // Synchroniser toutes les commandes WooCommerce (pagination complète)
 async function syncWooAllOrders() {
   try {
