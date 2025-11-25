@@ -3714,7 +3714,21 @@ app.get('/api/admin/tickets/awaiting-agent-response', authenticateAdmin, ensureA
   try {
     // Implémentation simple: retourner 0 par défaut pour éviter 404 côté admin.
     // Une implémentation avancée pourrait s'appuyer sur un journal d'événements ou messages entrants.
-    return res.json({ success: true, count: 0, tickets: [] });
+    let grouped = [];
+    try {
+      grouped = await StatusUpdate.aggregate([
+        { $sort: { ticketId: 1, updatedAt: 1, _id: 1 } },
+        { $group: { _id: '$ticketId', lastBy: { $last: '$updatedBy' }, lastAt: { $last: '$updatedAt' } } }
+      ]);
+    } catch (_) { grouped = []; }
+    const awaitingIds = grouped.filter(g => g && g.lastBy === 'client' && g._id).map(g => g._id);
+    let ticketDocs = [];
+    try { ticketDocs = await Ticket.find({ _id: { $in: awaitingIds } }, { ticketNumber: 1 }).lean(); } catch (_) { ticketDocs = []; }
+    const numMap = new Map(ticketDocs.map(t => [String(t._id), t.ticketNumber || '' ]));
+    const awaiting = grouped
+      .filter(g => g && g.lastBy === 'client' && g._id)
+      .map(g => ({ ticketId: String(g._id), ticketNumber: numMap.get(String(g._id)) || '', updatedAt: g.lastAt }));
+    return res.json({ success: true, awaiting });
   } catch (e) {
     console.error('[tickets:awaiting] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -3726,7 +3740,34 @@ app.get('/api/admin/tickets/client-updates', authenticateAdmin, ensureAdminOrAge
   try {
     const sinceIso = String(req.query.since || '').trim();
     // Version minimale: pas d'agrégation complexe, renvoyer une liste vide pour supprimer les 404
-    return res.json({ success: true, updates: [], since: sinceIso || new Date().toISOString() });
+    let sinceDate = new Date(0);
+    if (sinceIso) {
+      const d = new Date(sinceIso);
+      if (!isNaN(d.getTime())) sinceDate = d;
+    }
+    let statusList = [];
+    try {
+      statusList = await StatusUpdate.find({ updatedBy: 'client', updatedAt: { $gt: sinceDate } })
+        .sort({ updatedAt: 1, _id: 1 })
+        .limit(200)
+        .lean();
+    } catch (_) { statusList = []; }
+    const ids = Array.from(new Set(statusList.map(s => String(s.ticketId))));
+    let tickets = [];
+    try { tickets = await Ticket.find({ _id: { $in: ids } }, { ticketNumber: 1, 'clientInfo.firstName': 1, 'clientInfo.lastName': 1 }).lean(); } catch (_) { tickets = []; }
+    const tmap = new Map(tickets.map(t => [String(t._id), { number: t.ticketNumber || '', fn: t.clientInfo?.firstName || '', ln: t.clientInfo?.lastName || '' }]));
+    const updates = statusList.map(su => {
+      const t = tmap.get(String(su.ticketId)) || { number: '', fn: '', ln: '' };
+      return {
+        ticketId: String(su.ticketId),
+        ticketNumber: t.number,
+        updatedAt: su.updatedAt,
+        comment: su.comment || '',
+        clientFirstName: t.fn,
+        clientLastName: t.ln
+      };
+    });
+    return res.json({ success: true, updates, since: sinceIso || new Date().toISOString() });
   } catch (e) {
     console.error('[tickets:client-updates] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
