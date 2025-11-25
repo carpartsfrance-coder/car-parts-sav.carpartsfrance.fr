@@ -446,7 +446,7 @@ async function rebuildProductTypeInternal() {
 async function normalizeShippedStatusInternal() {
   let scanned = 0;
   let updated = 0;
-  const cursor = Order.find({ 'shipping.trackingNumber': { $exists: true, $ne: '' }, status: { $nin: ['fulfilled','delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'] } }).cursor();
+  const cursor = Order.find({ 'shipping.trackingNumber': { $exists: true, $ne: '' }, status: { $nin: ['fulfilled','delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded'] } }).cursor();
   for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
     scanned++;
     doc.status = 'fulfilled';
@@ -757,11 +757,11 @@ async function syncWooAllOrders() {
         const trackingNumber = metaGet('tracking');
         const carrier = metaGet('carrier') || metaGet('shipping_provider') || '';
         let statusToSet = internalStatus;
-        if (trackingNumber && !['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'].includes(internalStatus)) {
+        if (trackingNumber && !['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded'].includes(internalStatus)) {
           statusToSet = 'fulfilled';
         }
         // Ne jamais écraser un statut final déjà présent en base
-        const finals = ['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'];
+        const finals = ['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded'];
         let existingOrder = null;
         try { existingOrder = await Order.findOne({ provider: 'woocommerce', providerOrderId: wooId }, { status: 1, 'meta.vinOrPlate': 1 }).lean(); } catch(_) {}
         if (existingOrder && finals.includes(existingOrder.status)) {
@@ -1395,11 +1395,11 @@ async function syncWooRecentOrders() {
       const trackingNumber2 = metaGet2('tracking');
       const carrier2 = metaGet2('carrier') || metaGet2('shipping_provider') || '';
       let statusToSet2 = internalStatus;
-      if (trackingNumber2 && !['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'].includes(internalStatus)) {
+      if (trackingNumber2 && !['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded'].includes(internalStatus)) {
         statusToSet2 = 'fulfilled';
       }
       // Ne jamais écraser un statut final déjà présent en base
-      const finals2 = ['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed'];
+      const finals2 = ['delivered','delivered_awaiting_deposit','deposit_received','cancelled','refunded'];
       let existingOrder2 = null;
       try { existingOrder2 = await Order.findOne({ provider: 'woocommerce', providerOrderId: wooId }, { status: 1, 'meta.vinOrPlate': 1 }).lean(); } catch(_) {}
       if (existingOrder2 && finals2.includes(existingOrder2.status)) {
