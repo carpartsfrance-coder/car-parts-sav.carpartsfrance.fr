@@ -2786,6 +2786,22 @@ app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, 
   }
 });
 
+// Récupérer le détail d'une commande (pour l'édition/expédition)
+app.get('/api/admin/orders/:id', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'ID invalide' });
+    }
+    const order = await Order.findById(id).lean();
+    if (!order) return res.status(404).json({ success: false, message: 'Commande introuvable' });
+    return res.json({ success: true, order });
+  } catch (e) {
+    console.error('[orders:get] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
     const id = String(req.params.id || '').trim();
@@ -2807,6 +2823,26 @@ app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, as
     order.status = 'fulfilled';
     order.events = Array.isArray(order.events) ? order.events : [];
     order.events.push({ type: 'order_shipped', message: 'Commande expédiée', payloadSnippet: { carrier: order.shipping.carrier || '', trackingNumber: order.shipping.trackingNumber || '' } });
+    // Pousser la mise à jour vers WooCommerce si applicable (ajout tracking + transporteur)
+    if (order.provider === 'woocommerce' && order.providerOrderId) {
+      try {
+        const meta_data = [
+          { key: 'tracking', value: trackingNumber },
+          { key: 'carrier', value: carrier },
+          { key: 'shipping_provider', value: carrier }
+        ];
+        const wooResp = await wooUpdateOrder(order.providerOrderId, { status: 'completed', meta_data });
+        try {
+          const wooUpdated = wooResp.date_modified_gmt || wooResp.date_modified || null;
+          order.meta = order.meta || {};
+          if (wooUpdated) order.meta.sourceUpdatedAt = new Date(wooUpdated);
+        } catch (_) {}
+        order.events.push({ type: 'woo_update_pushed', message: 'Suivi expédition envoyé à Woo', payloadSnippet: { id: order.providerOrderId, carrier, trackingNumber, status: 'completed' } });
+      } catch (errWoo) {
+        console.warn('[orders:ship] Woo update failed', errWoo && errWoo.message ? errWoo.message : errWoo);
+        order.events.push({ type: 'woo_update_failed', message: 'Mise à jour WooCommerce échouée', payloadSnippet: { id: order.providerOrderId, error: (errWoo && errWoo.message) ? errWoo.message : String(errWoo) } });
+      }
+    }
     await order.save();
     return res.json({ success: true, order });
   } catch (e) {
