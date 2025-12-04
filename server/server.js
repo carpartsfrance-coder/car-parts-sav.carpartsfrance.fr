@@ -2786,20 +2786,6 @@ app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, 
   }
 });
 
-// Détail d'une commande
-app.get('/api/admin/orders/:id', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
-  try {
-    const id = String(req.params.id || '').trim();
-    const byId = id.match(/^[0-9a-fA-F]{24}$/);
-    const order = byId ? await Order.findById(id) : await Order.findOne({ number: id });
-    if (!order) return res.status(404).json({ success: false, message: 'Commande introuvable' });
-    return res.json({ success: true, order });
-  } catch (e) {
-    console.error('[orders:detail] erreur', e);
-    return res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-});
-
 app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
     const id = String(req.params.id || '').trim();
@@ -3578,23 +3564,7 @@ app.get('/api/admin/tickets', authenticateAdmin, ensureAdminOrAgent, async (req,
       }
     })();
 
-    const total = await Ticket.countDocuments(filter);
-    const tickets = await Ticket.find(filter)
-      .sort(sortSpec)
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const pages = Math.max(1, Math.ceil(total / limit));
-    return res.json({ success: true, tickets, pagination: { page, limit, pages, total } });
-  } catch (e) {
-    console.error('[tickets:list] erreur', e);
-    return res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-});
-
-// Détail d'un ticket
-app.get('/api/admin/tickets/:ticketId', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+app.get('/api/admin/tickets/:ticketId([a-fA-F0-9]{24}|CPF-[A-Za-z0-9-]+)', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
     const ticketId = String(req.params.ticketId || '').trim();
     let ticket = null;
@@ -3617,7 +3587,7 @@ app.get('/api/admin/tickets/:ticketId', authenticateAdmin, ensureAdminOrAgent, a
 });
 
 // Mettre à jour le statut d'un ticket (avec historique) et option d'email au client
-app.post('/api/admin/tickets/:ticketId/status', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+app.post('/api/admin/tickets/:ticketId([a-fA-F0-9]{24}|CPF-[A-Za-z0-9-]+)/status', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
     const ticketIdParam = String(req.params.ticketId || '').trim();
     let ticket = null;
@@ -3709,64 +3679,103 @@ app.post('/api/admin/tickets/:ticketId/notes', authenticateAdmin, ensureAdminOrA
   }
 });
 
-// Tickets en attente de réponse agent (endpoint minimal pour éviter 404)
+// Tickets en attente de réponse agent: dernière réponse cliente plus récente que la dernière réponse agent
 app.get('/api/admin/tickets/awaiting-agent-response', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
-    // Implémentation simple: retourner 0 par défaut pour éviter 404 côté admin.
-    // Une implémentation avancée pourrait s'appuyer sur un journal d'événements ou messages entrants.
-    let grouped = [];
-    try {
-      grouped = await StatusUpdate.aggregate([
-        { $sort: { ticketId: 1, updatedAt: 1, _id: 1 } },
-        { $group: { _id: '$ticketId', lastBy: { $last: '$updatedBy' }, lastAt: { $last: '$updatedAt' } } }
-      ]);
-    } catch (_) { grouped = []; }
-    const awaitingIds = grouped.filter(g => g && g.lastBy === 'client' && g._id).map(g => g._id);
-    let ticketDocs = [];
-    try { ticketDocs = await Ticket.find({ _id: { $in: awaitingIds } }, { ticketNumber: 1 }).lean(); } catch (_) { ticketDocs = []; }
-    const numMap = new Map(ticketDocs.map(t => [String(t._id), t.ticketNumber || '' ]));
-    const awaiting = grouped
-      .filter(g => g && g.lastBy === 'client' && g._id)
-      .map(g => ({ ticketId: String(g._id), ticketNumber: numMap.get(String(g._id)) || '', updatedAt: g.lastAt }));
-    return res.json({ success: true, awaiting });
+    const CLOSED_STATUSES = ['clôturé', 'refusé'];
+    const openTickets = await Ticket.find({ currentStatus: { $nin: CLOSED_STATUSES } })
+      .select('_id ticketNumber createdAt documents')
+      .lean();
+    if (!openTickets || openTickets.length === 0) {
+      return res.json({ success: true, count: 0, awaiting: [] });
+    }
+
+    const ids = openTickets.map(t => t._id);
+    const stats = await StatusUpdate.aggregate([
+      { $match: { ticketId: { $in: ids } } },
+      { $group: {
+          _id: '$ticketId',
+          lastClientAt: { $max: { $cond: [{ $eq: ['$updatedBy', 'client'] }, '$updatedAt', null] } },
+          lastAgentAt: { $max: { $cond: [{ $ne: ['$updatedBy', 'client'] }, '$updatedAt', null] } }
+        }
+      }
+    ]);
+    const byId = new Map(stats.map(s => [String(s._id), s]));
+
+    const awaiting = [];
+    for (const t of openTickets) {
+      const s = byId.get(String(t._id)) || {};
+      const lastClientAt = s.lastClientAt ? new Date(s.lastClientAt) : null;
+      const lastAgentAt = s.lastAgentAt ? new Date(s.lastAgentAt) : null;
+      // Chercher la date du dernier document uploadé par le client
+      let lastClientDocAt = null;
+      try {
+        const docs = Array.isArray(t.documents) ? t.documents : [];
+        for (const d of docs) {
+          if (!d) continue;
+          const by = (d.uploadedBy || '').toString().toLowerCase();
+          if (by === 'client' && d.uploadDate) {
+            const dt = new Date(d.uploadDate);
+            if (!isNaN(dt) && (!lastClientDocAt || dt > lastClientDocAt)) lastClientDocAt = dt;
+          }
+        }
+      } catch (_) {}
+      // Choisir la plus récente des deux dates côté client
+      let lastClientSignalAt = lastClientAt;
+      if (lastClientDocAt && (!lastClientSignalAt || lastClientDocAt > lastClientSignalAt)) {
+        lastClientSignalAt = lastClientDocAt;
+      }
+      let since = null;
+      if (!lastAgentAt) {
+        since = t.createdAt;
+      } else if (lastClientSignalAt && lastClientSignalAt > lastAgentAt) {
+        since = lastClientSignalAt;
+      }
+      if (since) {
+        awaiting.push({ ticketId: String(t._id), ticketNumber: t.ticketNumber, updatedAt: since });
+      }
+    }
+
+    return res.json({ success: true, count: awaiting.length, awaiting });
   } catch (e) {
     console.error('[tickets:awaiting] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-// Polling minimal des mises à jour côté client (stub)
+// Polling des mises à jour côté client: renvoyer les réponses client depuis 'since'
 app.get('/api/admin/tickets/client-updates', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
     const sinceIso = String(req.query.since || '').trim();
-    // Version minimale: pas d'agrégation complexe, renvoyer une liste vide pour supprimer les 404
-    let sinceDate = new Date(0);
-    if (sinceIso) {
-      const d = new Date(sinceIso);
-      if (!isNaN(d.getTime())) sinceDate = d;
+    const parsed = sinceIso ? new Date(sinceIso) : null;
+    const since = (parsed && !isNaN(parsed.getTime())) ? parsed : new Date(Date.now() - 5 * 60 * 1000);
+
+    const rows = await StatusUpdate.find({ updatedBy: 'client', updatedAt: { $gt: since } })
+      .sort({ updatedAt: 1 })
+      .lean();
+
+    if (!rows || rows.length === 0) {
+      return res.json({ success: true, updates: [], since: sinceIso || new Date().toISOString() });
     }
-    let statusList = [];
-    try {
-      statusList = await StatusUpdate.find({ updatedBy: 'client', updatedAt: { $gt: sinceDate } })
-        .sort({ updatedAt: 1, _id: 1 })
-        .limit(200)
-        .lean();
-    } catch (_) { statusList = []; }
-    const ids = Array.from(new Set(statusList.map(s => String(s.ticketId))));
-    let tickets = [];
-    try { tickets = await Ticket.find({ _id: { $in: ids } }, { ticketNumber: 1, 'clientInfo.firstName': 1, 'clientInfo.lastName': 1 }).lean(); } catch (_) { tickets = []; }
-    const tmap = new Map(tickets.map(t => [String(t._id), { number: t.ticketNumber || '', fn: t.clientInfo?.firstName || '', ln: t.clientInfo?.lastName || '' }]));
-    const updates = statusList.map(su => {
-      const t = tmap.get(String(su.ticketId)) || { number: '', fn: '', ln: '' };
+
+    const ticketIds = Array.from(new Set(rows.map(r => r.ticketId).filter(Boolean)));
+    const tickets = await Ticket.find({ _id: { $in: ticketIds } })
+      .select('_id ticketNumber clientInfo.firstName clientInfo.lastName')
+      .lean();
+    const tMap = new Map(tickets.map(t => [String(t._id), t]));
+
+    const updates = rows.map(r => {
+      const t = tMap.get(String(r.ticketId));
       return {
-        ticketId: String(su.ticketId),
-        ticketNumber: t.number,
-        updatedAt: su.updatedAt,
-        comment: su.comment || '',
-        clientFirstName: t.fn,
-        clientLastName: t.ln
+        ticketId: String(r.ticketId),
+        ticketNumber: t && t.ticketNumber ? t.ticketNumber : '',
+        updatedAt: r.updatedAt,
+        clientFirstName: (t && t.clientInfo && t.clientInfo.firstName) ? t.clientInfo.firstName : '',
+        clientLastName: (t && t.clientInfo && t.clientInfo.lastName) ? t.clientInfo.lastName : '',
+        comment: r.comment || ''
       };
     });
+
     return res.json({ success: true, updates, since: sinceIso || new Date().toISOString() });
   } catch (e) {
     console.error('[tickets:client-updates] erreur', e);
