@@ -1635,6 +1635,19 @@ window.showNotification = function(message, type = 'info') {
     window.startClientUpdatesPolling = function() {
         if (pollIntervalId) return; // already started
         lastPollAt = null; // reset
+        (async () => {
+            try {
+                await syncAwaitingFromBackend();
+                updateBadge();
+                if (window.__clientUpdatesMap instanceof Map) {
+                    for (const [id] of window.__clientUpdatesMap.entries()) {
+                        try { highlightRow(id); } catch (_) {}
+                    }
+                }
+                try { if (typeof window.updateQuickFilterCounts === 'function') window.updateQuickFilterCounts(); } catch (_) {}
+                try { if (typeof window.updateOverdueBadgesForVisibleRows === 'function') window.updateOverdueBadgesForVisibleRows(); } catch (_) {}
+            } catch (_) {}
+        })();
         // initial seed and interval
         pollOnce();
         pollIntervalId = setInterval(pollOnce, 30000);
@@ -2497,16 +2510,9 @@ function applyRoleBasedUI() {
                     userManagementSection.style.display = '';
                 }
             }
-            // Édition docs admin
+            // Cacher l'ancien éditeur de documentation sur #docs (page formation)
             const docsAdmin = document.getElementById('docs-admin-section');
-            if (docsAdmin) {
-                const onDocs = (typeof window !== 'undefined' && window.location && window.location.hash === '#docs');
-                if (currentUserRole === 'admin' && onDocs) {
-                    docsAdmin.style.display = '';
-                } else {
-                    docsAdmin.style.display = 'none';
-                }
-            }
+            if (docsAdmin) docsAdmin.style.display = 'none';
         }
     } catch (_) {}
 }
@@ -2863,15 +2869,18 @@ async function checkAuth() {
         setActiveNav('docs');
         // Charger la sidebar publique dynamiquement (une seule fois)
         try {
-            const side = document.getElementById('docs-sidebar-dynamic');
+            const side = document.getElementById('academy-sidebar') || document.getElementById('docs-sidebar-dynamic');
             if (typeof loadPublicDocsSidebar === 'function' && side && !side.dataset.loaded) {
                 loadPublicDocsSidebar();
             }
         } catch(_) {}
         // Optionnel: si aucun document chargé, afficher un message par défaut
-        const art = document.getElementById('docs-content-article');
+        const art = document.getElementById('academy-content') || document.getElementById('docs-content-article');
         if (art && !art.dataset.loaded) {
-            art.innerHTML = '<p>Sélectionnez un document dans le menu de gauche pour l’afficher ici.</p>';
+            art.innerHTML = '<div style="background:#f1f5f9;border:1px solid #e5e7eb;border-radius:10px;padding:14px;">' +
+              '<h3 style="margin:0 0 8px 0;">Bienvenue</h3>' +
+              '<p>Choisissez un guide à gauche ou utilisez la recherche pour trouver une procédure. Cette page regroupe les ressources essentielles pour former et accompagner vos agents.</p>' +
+            '</div>';
         }
     }
     
@@ -9509,45 +9518,48 @@ async function checkAuth() {
     // Charge un document Markdown depuis admin/docs/<relativePath> et l'affiche
     window.loadMarkdownDoc = async function(relativePath) {
         try {
-            const container = document.getElementById('docs-content-article');
+            const container = document.getElementById('academy-content') || document.getElementById('docs-content-article');
             if (!container) return;
             container.dataset.loaded = 'true';
             container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Chargement...</p>';
-            // Construire une URL absolue fiable vers /admin/docs/<path>
-            const base = (location && typeof location.pathname === 'string' && location.pathname.startsWith('/admin')) ? '/admin/' : '/';
-            let url = `${base}docs/${relativePath}`.replace(/\\+/g, '/').replace(/\/+/g, '/');
-            console.debug('[Docs] Chargement du document:', relativePath, '->', url);
-            let resp = await fetch(url, { credentials: 'same-origin' }).catch(e => ({ ok: false, _err: e }));
-            // Fallback si besoin (au cas improbable où le contexte n'est pas /admin)
-            if (!resp || !resp.ok) {
-                const alt = `/admin/docs/${relativePath}`;
-                if (alt !== url) {
-                    console.warn('[Docs] Premier essai échoué, tentative fallback:', alt, resp && resp.status);
-                    resp = await fetch(alt, { credentials: 'same-origin' }).catch(e => ({ ok: false, _err: e }));
-                    url = alt;
+            // 1) Essayer l'API JSON publique (lecture seule)
+            let md = '';
+            try {
+                const apiUrl = `/api/docs/content?path=${encodeURIComponent(relativePath)}`;
+                const apiRes = await fetch(apiUrl, { credentials: 'same-origin' });
+                if (apiRes.ok) {
+                    const data = await apiRes.json().catch(() => ({}));
+                    if (data && data.success && typeof data.content === 'string') {
+                        md = data.content;
+                    }
                 }
+            } catch(_) {}
+            // 2) Fallback statique si nécessaire
+            if (!md) {
+                const base = (location && typeof location.pathname === 'string' && location.pathname.startsWith('/admin')) ? '/admin/' : '/';
+                let url = (base + 'docs/' + relativePath).replace(/\/+/g, '/');
+                if (!url.startsWith('/')) url = '/' + url;
+                let resp = await fetch(url, { credentials: 'same-origin' }).catch(() => null);
+                if (!resp || !resp.ok) {
+                    const alt = `/admin/docs/${relativePath}`;
+                    if (alt !== url) resp = await fetch(alt, { credentials: 'same-origin' }).catch(() => null);
+                }
+                if (!resp || !resp.ok) {
+                    container.innerHTML = `<div class="login-error">Document introuvable: ${relativePath}</div>`;
+                    return;
+                }
+                md = await resp.text();
             }
-            if (!resp.ok) {
-                const text = await resp.text().catch(() => '');
-                throw new Error(text || `Impossible de charger ${url}`);
-            }
-            const md = await resp.text();
+            // 3) Rendu Markdown
             let html = '';
             try {
-                if (typeof marked !== 'undefined' && marked.parse) {
-                    html = marked.parse(md);
-                } else {
-                    html = md; // fallback en texte brut si marked non dispo
-                }
-            } catch (perr) {
-                console.error('[Docs] Erreur de parsing Markdown via marked:', perr);
-                html = md; // fallback
-            }
-            // Décision d’escalade selon le doc affiché
-            container.dataset.docRel = relativePath;
+                if (typeof marked !== 'undefined' && marked.parse) html = marked.parse(md);
+                else html = md;
+            } catch (_) { html = md; }
+
+            // 4) Décisions/contextes d'action selon le chemin
             const decision = (function(rel){
                 const r = String(rel || '').toLowerCase();
-                // Règles métier demandées
                 if (r.startsWith('guides/mecatroniques')) {
                     return { type: 'meca', title: 'Mécatronique — action conseillée', primary: 'Contacter le fournisseur mécatronique', who: 'fournisseur', templateClient: "Bonjour,\n\nSuite à votre signalement sur la mécatronique, nous ouvrons une demande auprès du fournisseur. Merci de nous transmettre :\n- Photos du montage et connectiques\n- Lecture des défauts éventuelle\n- Numéro de série de la pièce\n\nNous revenons vers vous dès retour du fournisseur.\nCordialement,", templateInterne: "[Action] Dossier transmis au fournisseur mécatronique. En attente de retour." };
                 }
@@ -9557,64 +9569,84 @@ async function checkAuth() {
                 if (r.startsWith('transport/')) {
                     return { type: 'transport', title: 'Transport — action conseillée', primary: 'Ouvrir la procédure transport', who: 'transport', open: 'docs/transport/ups.md', templateClient: "Bonjour,\n\nPour le transport, merci de suivre la procédure UPS (emballage, photos, étiquette). Nous pouvons vous la renvoyer si besoin.\n\nCordialement,", templateInterne: "[Action] Se référer à la documentation transport (UPS)." };
                 }
-                // Par défaut, rien
                 return null;
             })(relativePath);
 
-            const actionsHtml = decision ? `
-                <div class="docs-actions" data-who="${decision.who}">
-                  <div class="docs-actions-title">${decision.title}</div>
-                  <div class="docs-actions-buttons">
-                    ${decision.type === 'transport'
-                        ? `<button class="btn-secondary" data-doc-action="open-transport" data-href="${decision.open}"><i class="fas fa-truck"></i> ${decision.primary}</button>`
-                        : decision.who === 'fournisseur'
-                            ? `<button class="btn-secondary" data-doc-action="contact-supplier"><i class="fas fa-industry"></i> ${decision.primary}</button>`
-                            : `<button class="btn-secondary" data-doc-action="contact-boss"><i class="fas fa-user-tie"></i> ${decision.primary}</button>`}
-                    <button class="btn-light" data-doc-action="insert-template" data-template="client"><i class="fas fa-copy"></i> Réponse client</button>
-                    <button class="btn-light" data-doc-action="insert-template" data-template="interne"><i class="fas fa-clipboard"></i> Note interne</button>
-                  </div>
-                </div>
-            ` : '';
+            const actionsHtml = decision ? (
+                '<div class="docs-actions" data-who="' + decision.who + '">' +
+                '<div class="docs-actions-title">' + decision.title + '</div>' +
+                '<div class="docs-actions-buttons">' +
+                (decision.type === 'transport'
+                    ? '<button class="btn-secondary" data-doc-action="open-transport" data-href="' + decision.open + '"><i class="fas fa-truck"></i> ' + decision.primary + '</button>'
+                    : (decision.who === 'fournisseur'
+                        ? '<button class="btn-secondary" data-doc-action="contact-supplier"><i class="fas fa-industry"></i> ' + decision.primary + '</button>'
+                        : '<button class="btn-secondary" data-doc-action="contact-boss"><i class="fas fa-user-tie"></i> ' + decision.primary + '</button>')) +
+                '<button class="btn-light" data-doc-action="insert-template" data-template="client"><i class="fas fa-copy"></i> Réponse client</button>' +
+                '<button class="btn-light" data-doc-action="insert-template" data-template="interne"><i class="fas fa-clipboard"></i> Note interne</button>' +
+                '</div></div>'
+            ) : '';
 
-            // Fallback visible si le rendu semble vide
-            const finalHtml = (actionsHtml + html);
-            const isEmpty = !finalHtml || !String(finalHtml).trim();
-            if (isEmpty) {
-                console.warn('[Docs] HTML vide après rendu, activation du fallback');
-                container.innerHTML = `<div class="docs-actions" style="margin-bottom:10px; padding:10px; background:#fff3cd; border:1px solid #ffe69c; border-radius:8px; color:#7a5d00;">Rendu vide — affichage brut du fichier.</div><pre style="white-space:pre-wrap;">${md.replace(/[&<>]/g,s=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[s]))}</pre>`;
+            const finalHtml = actionsHtml + html;
+            if (!finalHtml || !String(finalHtml).trim()) {
+                container.innerHTML = '<div class="docs-actions" style="margin-bottom:10px; padding:10px; background:#fff3cd; border:1px solid #ffe69c; border-radius:8px; color:#7a5d00;">Rendu vide — affichage brut du fichier.</div>' +
+                  '<pre style="white-space:pre-wrap;">' + md.replace(/[&<>]/g,function(s){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[s];}) + '</pre>';
             } else {
                 container.innerHTML = finalHtml;
             }
-            // S'assurer que la zone est visible
+
+            // Sommaire automatique
             try {
-                const docsRoot = document.getElementById('admin-docs');
-                const docsContent = container.closest && container.closest('.docs-content');
-                if (docsRoot) docsRoot.style.display = 'block';
-                if (docsContent && docsContent.style) docsContent.style.display = 'block';
-                if (container && container.style) container.style.display = 'block';
-                const st = window.getComputedStyle ? window.getComputedStyle(container) : null;
-                console.debug('[Docs] Rendu inséré:', {
-                    lenMd: md.length,
-                    lenHtml: String(html).length,
-                    decision: !!decision,
-                    path: relativePath,
-                    offsetHeight: container.offsetHeight,
-                    visible: st ? (st.display + '|' + st.visibility + '|' + st.opacity) : 'n/a',
-                    txtLen: (container.textContent || '').length
-                });
+                const hs = Array.from(container.querySelectorAll('h1, h2, h3'));
+                if (hs.length > 1) {
+                    const toc = document.createElement('nav');
+                    toc.className = 'docs-toc';
+                    toc.style.cssText = 'background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin:10px 0;';
+                    const makeId = function(s){ return String(s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); };
+                    const items = hs.map(function(h){
+                        const txt = h.textContent || '';
+                        var id = h.id || makeId(txt);
+                        if (!h.id) h.id = id;
+                        const indent = h.tagName === 'H1' ? 0 : (h.tagName === 'H2' ? 10 : 20);
+                        return '<div style="margin-left:' + indent + 'px;"><a href="#' + id + '" data-anchor="' + id + '" style="text-decoration:none;">' + txt + '</a></div>';
+                    }).join('');
+                    toc.innerHTML = '<strong>Sommaire</strong>' + items;
+                    container.insertAdjacentElement('afterbegin', toc);
+                    toc.addEventListener('click', function(ev){
+                        const a = ev.target.closest && ev.target.closest('a[data-anchor]');
+                        if (!a) return; ev.preventDefault();
+                        const id = a.getAttribute('data-anchor');
+                        const target = container.querySelector('#' + CSS.escape(id));
+                        if (target && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                }
             } catch(_) {}
-            // Stocker les templates pour les boutons
-            if (decision) {
-                container.dataset.templateClient = decision.templateClient || '';
-                container.dataset.templateInterne = decision.templateInterne || '';
-            } else {
-                container.dataset.templateClient = '';
-                container.dataset.templateInterne = '';
-            }
-            // Remonter en haut du contenu
+
+            // Actions (copie modèles, navigation)
+            try {
+                const act = container.querySelector('.docs-actions');
+                if (act) {
+                    act.addEventListener('click', function(ev){
+                        const b = ev.target && ev.target.closest && ev.target.closest('[data-doc-action]');
+                        if (!b) return;
+                        const type = b.getAttribute('data-doc-action') || '';
+                        if (type === 'insert-template') {
+                            const kind = b.getAttribute('data-template') || 'client';
+                            const txt = kind === 'client' ? (container.dataset.templateClient || '') : (container.dataset.templateInterne || '');
+                            if (txt) { try { navigator.clipboard.writeText(txt); if (typeof showToast === 'function') showToast('Modèle copié', 'success'); } catch(_) {} }
+                        } else if (type === 'open-transport') {
+                            const href = b.getAttribute('data-href') || '';
+                            if (href) { try { window.loadMarkdownDoc(href); } catch(_) {} }
+                        } else if (type === 'contact-supplier' || type === 'contact-boss') {
+                            try { if (typeof showToast === 'function') showToast('Action notée. Voir modèles ci‑dessus.', 'info'); } catch(_) {}
+                        }
+                    }, { once: true });
+                }
+            } catch(_) {}
+
+            // Visible et remonter en haut
             try { if (window.innerWidth >= 1000) { container.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } catch(_) {}
         } catch (err) {
-            const container = document.getElementById('docs-content-article');
+            const container = document.getElementById('academy-content') || document.getElementById('docs-content-article');
             if (container) container.innerHTML = `<div class="login-error">${err.message || 'Erreur inattendue'}</div>`;
             console.error('loadMarkdownDoc error:', err);
         }
@@ -9622,7 +9654,7 @@ async function checkAuth() {
 
     // --- Documentation publique: sidebar dynamique ---
     async function loadPublicDocsSidebar() {
-        const container = document.getElementById('docs-sidebar-dynamic');
+        const container = document.getElementById('academy-sidebar') || document.getElementById('docs-sidebar-dynamic');
         if (!container) return;
         container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Chargement...</p>';
         try {
@@ -9633,8 +9665,10 @@ async function checkAuth() {
             }
             const files = Array.isArray(data.files) ? data.files : [];
             renderPublicDocsSidebar(files);
+            try { window.__docsFiles = files; } catch(_) {}
+            try { installDocsSearch(); } catch(_) {}
             // Charger automatiquement le premier document si rien n'est encore chargé
-            const art = document.getElementById('docs-content-article');
+            const art = document.getElementById('academy-content') || document.getElementById('docs-content-article');
             const first = files[0] && files[0].path;
             if (first && art && !art.dataset.loaded) {
                 try { window.loadMarkdownDoc(first); } catch(_) {}
@@ -9646,24 +9680,79 @@ async function checkAuth() {
     }
 
     function renderPublicDocsSidebar(files) {
-        const container = document.getElementById('docs-sidebar-dynamic');
+        const container = document.getElementById('academy-sidebar') || document.getElementById('docs-sidebar-dynamic');
         if (!container) return;
         const list = Array.isArray(files) ? files : [];
         if (list.length === 0) {
             container.innerHTML = '<p>Aucun document disponible.</p>';
             return;
         }
-        const html = [
-            '<ul class="docs-list" style="list-style:none; margin:0; padding:0;">',
-            ...list.map(f => {
-                const safePath = String(f.path || '');
-                const label = String(f.name || safePath.split('/').pop());
-                return `<li style="padding:8px 10px; border-bottom:1px solid #f0f0f0;"><a href="#docs" data-doc="${safePath}" style="display:flex; gap:8px; align-items:center; text-decoration:none; color:inherit;"><i class="fas fa-file-alt" aria-hidden="true"></i><span>${safePath}</span></a></li>`;
-            }),
-            '</ul>'
-        ].join('');
-        container.innerHTML = html;
+        const tree = (function build(filesArr){
+            const root = {};
+            filesArr.forEach(f => {
+                const parts = String(f.path || '').split('/').filter(Boolean);
+                let node = root;
+                parts.forEach((seg, idx) => {
+                    node.children = node.children || {};
+                    node.children[seg] = node.children[seg] || {};
+                    node = node.children[seg];
+                    if (idx === parts.length - 1) node.file = f;
+                });
+            });
+            return root;
+        })(list);
+        const makeLabel = (p) => {
+            const s = String(p || '');
+            const base = s.split('/').pop() || s;
+            return base.replace(/\.md$/i, '').replace(/[_-]/g, ' ');
+        };
+        const render = (node, prefix = '', level = 0) => {
+            const keys = Object.keys(node.children || {});
+            if (!keys.length) return '';
+            return '<ul class="docs-list" style="list-style:none; margin:0; padding-left:' + (level ? 10 : 0) + 'px;">' + keys.sort().map(k => {
+                const child = node.children[k];
+                const childPath = prefix ? (prefix + '/' + k) : k;
+                if (child && child.file) {
+                    const p = child.file.path;
+                    return `<li style="padding:6px 10px; border-bottom:1px solid #f0f0f0;"><a href="#docs" data-doc="${p}" style="display:flex; gap:8px; align-items:center; text-decoration:none; color:inherit;"><i class="fas fa-file-alt" aria-hidden="true"></i><span>${makeLabel(p)}</span></a></li>`;
+                }
+                return `<li class="docs-folder" data-folder="${childPath}" style="padding:4px 6px;">` +
+                    `<div class="docs-folder-toggle" data-toggle="${childPath}" style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;"><i class="fas fa-folder"></i><strong>${makeLabel(k)}</strong></div>` +
+                    `<div class="docs-folder-children" data-children="${childPath}" style="margin-left:8px; display:none;">${render(child, childPath, level + 1)}</div>` +
+                `</li>`;
+            }).join('') + '</ul>';
+        };
+        container.innerHTML = render(tree);
         try { container.dataset.loaded = 'true'; } catch(_) {}
+        try {
+            container.addEventListener('click', function(ev){
+                const t = ev.target && ev.target.closest && ev.target.closest('.docs-folder-toggle');
+                if (!t) return;
+                const key = t.getAttribute('data-toggle');
+                const children = container.querySelector('[data-children="' + key + '"]');
+                if (children) children.style.display = (children.style.display === 'none' || children.style.display === '') ? 'block' : 'none';
+            });
+        } catch(_) {}
+    }
+
+    function installDocsSearch() {
+        const input = document.getElementById('academy-search') || document.getElementById('docs-search');
+        if (!input) return;
+        if (input.__bound) return; input.__bound = true;
+        let to = null;
+        const run = () => {
+            const q = (input.value || '').trim().toLowerCase();
+            const files = Array.isArray(window.__docsFiles) ? window.__docsFiles : [];
+            if (!q) { renderPublicDocsSidebar(files); return; }
+            const filtered = files.filter(f => {
+                const a = String(f.path || '').toLowerCase();
+                const b = String(f.name || '').toLowerCase();
+                return a.includes(q) || b.includes(q);
+            });
+            renderPublicDocsSidebar(filtered);
+        };
+        input.addEventListener('input', () => { clearTimeout(to); to = setTimeout(run, 180); });
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
     }
 
     // Clics sur les liens de la sidebar documentation (capture pour priorité maximale)
@@ -9744,7 +9833,7 @@ async function checkAuth() {
     }, true);
 
     // Recherche dans la sidebar docs
-    const docsSearch = document.getElementById('docs-search');
+    const docsSearch = document.getElementById('academy-search') || document.getElementById('docs-search');
     if (docsSearch) {
         docsSearch.addEventListener('input', function() {
             const q = (this.value || '').toLowerCase().trim();
