@@ -3564,6 +3564,21 @@ app.get('/api/admin/tickets', authenticateAdmin, ensureAdminOrAgent, async (req,
       }
     })();
 
+    const total = await Ticket.countDocuments(filter);
+    const tickets = await Ticket.find(filter)
+      .sort(sortSpec)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const pages = Math.max(1, Math.ceil(total / limit));
+    return res.json({ success: true, tickets, pagination: { page, limit, pages, total } });
+  } catch (e) {
+    console.error('[tickets:list] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 app.get('/api/admin/tickets/:ticketId([a-fA-F0-9]{24}|CPF-[A-Za-z0-9-]+)', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
     const ticketId = String(req.params.ticketId || '').trim();
