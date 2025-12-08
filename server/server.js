@@ -80,7 +80,7 @@ const { sendStatusUpdateEmail, sendTicketCreationEmail, sendAssignmentEmail, sen
 const setupStatsRoutes = require('./stats-api');
 const { authenticateAdmin: adminAuthMW } = require('./middleware/auth');
 const { startSlaWatcher } = require('./jobs/slaWatcher');
-const { startDeliveryWatcher, runDeliveryReconciliationOnce } = require('./jobs/deliveryWatcher');
+const { startDeliveryWatcher, runDeliveryReconciliationOnce, runDeliveryScanOnce } = require('./jobs/deliveryWatcher');
 require('dotenv').config();
 const { isS3Enabled, uploadBuffer, streamToResponse } = require('./services/storage');
 const { getCarrierTrackingEvents, getCarrierPublicLink } = require('./services/carrierTracking');
@@ -130,6 +130,7 @@ async function rebuildVinOrPlateInternal() {
         message: `VIN/Plaque recalculé: ${nextValue}`,
         at: new Date()
       });
+
 
 // Mettre à jour un modèle
 app.put('/api/admin/tasks/templates/:id', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
@@ -2688,6 +2689,67 @@ app.get('/api/admin/diagnostics/woo', authenticateAdmin, ensureAdmin, async (req
     return res.json({ success: false, present, method, status, urlUsed, error: (e && e.message) || String(e) });
   }
 });
+// Lancer un scan de livraisons (ADMIN)
+app.post('/api/admin/delivery/scan', authenticateAdmin, ensureAdmin, async (req, res) => {
+  try {
+    const out = await runDeliveryScanOnce();
+    return res.json({ success: true, ...out });
+  } catch (e) {
+    console.error('[delivery:scan] erreur', e);
+    return res.status(500).json({ success: false, message: e && e.message ? e.message : 'Erreur serveur' });
+  }
+});
+
+// Lancer une réconciliation (ADMIN)
+app.post('/api/admin/delivery/reconcile', authenticateAdmin, ensureAdmin, async (req, res) => {
+  try {
+    const out = await runDeliveryReconciliationOnce();
+    return res.json({ success: true, ...out });
+  } catch (e) {
+    console.error('[delivery:reconcile] erreur', e);
+    return res.status(500).json({ success: false, message: e && e.message ? e.message : 'Erreur serveur' });
+  }
+});
+
+// Rétro-remplir la date de création Woo (meta.sourceCreatedAt) pour les commandes Woo manquantes
+app.post('/api/admin/orders/backfill-woo-created', authenticateAdmin, ensureAdmin, async (req, res) => {
+  try {
+    const base = (process.env.WOOCOMMERCE_BASE_URL || '').trim();
+    const ck = (process.env.WOOCOMMERCE_CONSUMER_KEY || '').trim();
+    const cs = (process.env.WOOCOMMERCE_CONSUMER_SECRET || '').trim();
+    if (!base || !ck || !cs) return res.status(400).json({ success: false, message: 'Config WooCommerce manquante' });
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
+    const toFix = await Order.find({ provider: 'woocommerce', $or: [ { 'meta.sourceCreatedAt': { $exists: false } }, { 'meta.sourceCreatedAt': null } ] }, { providerOrderId: 1, meta: 1 }).limit(limit);
+    let scanned = 0; let updated = 0; const errors = [];
+    for (const doc of toFix) {
+      scanned++;
+      const wooId = String(doc.providerOrderId || '').trim();
+      if (!wooId) continue;
+      try {
+        const full = await fetchWooOrderDetail(base, ck, cs, wooId);
+        const createdRaw = full?.date_created_gmt || full?.date_created || null;
+        const updatedRaw = full?.date_modified_gmt || full?.date_modified || null;
+        const created = createdRaw ? new Date(createdRaw) : null;
+        const modified = updatedRaw ? new Date(updatedRaw) : null;
+        if (created && !isNaN(created.getTime())) {
+          doc.meta = doc.meta || {};
+          doc.meta.sourceCreatedAt = created;
+          if (modified && !isNaN(modified.getTime())) doc.meta.sourceUpdatedAt = modified;
+          doc.events = Array.isArray(doc.events) ? doc.events : [];
+          doc.events.push({ type: 'backfill_source_created', message: 'Date de création Woo rétro-remplie', at: new Date(), payloadSnippet: { id: wooId } });
+          await doc.save();
+          updated++;
+        }
+      } catch (e) {
+        errors.push({ id: doc._id.toString(), wooId, error: e && e.message ? e.message : String(e) });
+      }
+    }
+    return res.json({ success: true, scanned, updated, remainingEstimate: Math.max(0, (await Order.countDocuments({ provider: 'woocommerce', $or: [ { 'meta.sourceCreatedAt': { $exists: false } }, { 'meta.sourceCreatedAt': null } ] })) - updated) , errors });
+  } catch (e) {
+    console.error('[orders:backfill-woo-created] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 // Supprimer une commande (ADMIN uniquement)
 app.delete('/api/admin/orders/:id', authenticateAdmin, ensureAdmin, async (req, res) => {
@@ -2740,6 +2802,76 @@ app.post('/api/admin/orders/sync-woo-all', adminAuthMW, ensureAdminOrAgent, asyn
   }
 });
 
+// Backfill ParcelPanel: créer les suivis manquants à partir des commandes Woo avec tracking
+app.post('/api/admin/parcelpanel/backfill', authenticateAdmin, ensureAdmin, async (req, res) => {
+  try {
+    const apiKeyPP = (process.env.PARCELPANEL_API_KEY || '').trim();
+    if (!apiKeyPP) return res.status(400).json({ success: false, message: 'PARCELPANEL_API_KEY manquante' });
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const list = await Order.find({ provider: 'woocommerce', 'shipping.trackingNumber': { $exists: true, $ne: '' } }, { providerOrderId: 1, 'shipping.trackingNumber': 1, 'shipping.carrier': 1, 'shipping.shippedAt': 1 }).limit(limit).lean();
+    if (!list.length) return res.json({ success: true, scanned: 0, createCandidates: 0, created: 0 });
+    const ordersPayload = list.map(o => ({ order_id: String(o.providerOrderId) }));
+    const resp = await fetch('https://wp-api.parcelpanel.com/api/v1/tracking/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'PP-Api-Key': apiKeyPP },
+      body: JSON.stringify({ orders: ordersPayload })
+    });
+    const data = await resp.json().catch(() => ({}));
+    const arr = Array.isArray(data && data.data) ? data.data : [];
+    const byId = new Map(arr.map(it => [String(it.order_id || it.number || ''), it]));
+    const ppCourier = (v) => {
+      const s = String(v || '').toLowerCase();
+      if (!s) return '';
+      if (s.includes('ups')) return 'ups';
+      if (s.includes('chronopost')) return 'chronopost-fr';
+      if (s.includes('colissimo') || s.includes('la poste') || s.includes('laposte')) return 'colissimo';
+      if (s.includes('dhl')) return 'dhl';
+      if (s.includes('dpd')) return 'dpd';
+      if (s.includes('gls')) return 'gls';
+      return '';
+    };
+    const ppDate = (d) => {
+      try {
+        const x = d instanceof Date ? d : new Date(d);
+        if (isNaN(x.getTime())) return undefined;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())} ${pad(x.getHours())}:${pad(x.getMinutes())}:${pad(x.getSeconds())}`;
+      } catch { return undefined; }
+    };
+    const needCreate = [];
+    for (const o of list) {
+      const id = String(o.providerOrderId);
+      const item = byId.get(id);
+      const shipments = item && Array.isArray(item.shipments) ? item.shipments : [];
+      const hasTracking = shipments.some(s => String(s.tracking_number || '').trim());
+      if (!hasTracking && o?.shipping?.trackingNumber) {
+        const cc = ppCourier(o?.shipping?.carrier || '');
+        const payload = {
+          order_id: isNaN(Number(id)) ? id : Number(id),
+          tracking_number: o.shipping.trackingNumber,
+          ...(cc ? { courier_code: cc } : {}),
+          ...(o.shipping.shippedAt ? { date_shipped: ppDate(o.shipping.shippedAt) } : {}),
+          status_shipped: 1
+        };
+        needCreate.push(payload);
+      }
+    }
+    let created = 0;
+    const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+    for (const grp of chunk(needCreate, 40)) {
+      const r2 = await fetch('https://wp-api.parcelpanel.com/api/v1/tracking/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'PP-Api-Key': apiKeyPP }, body: JSON.stringify({ shipments: grp })
+      });
+      const j2 = await r2.json().catch(() => ({}));
+      created += Number((j2 && j2.data && j2.data.success_count) ? j2.data.success_count : 0);
+    }
+    return res.json({ success: true, scanned: list.length, createCandidates: needCreate.length, created });
+  } catch (e) {
+    console.error('[parcelpanel:backfill] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Lister les commandes (pagination + filtres de base)
 app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
@@ -2775,7 +2907,12 @@ app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, 
       const range = {};
       if (from) { const d = new Date(from); if (!isNaN(d.getTime())) range.$gte = d; }
       if (to) { const d = new Date(to); if (!isNaN(d.getTime())) range.$lte = new Date(new Date(to).getTime() + 24*60*60*1000 - 1); }
-      if (Object.keys(range).length) filter.createdAt = range;
+      if (Object.keys(range).length) {
+        const dateCond = { $or: [ { 'meta.sourceCreatedAt': range }, { createdAt: range } ] };
+        if (filter.$and) filter.$and.push(dateCond);
+        else if (filter.$or) filter.$and = [ { $or: filter.$or }, dateCond ], delete filter.$or;
+        else Object.assign(filter, dateCond);
+      }
     }
 
     // Tri
@@ -2787,15 +2924,31 @@ app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, 
       case 'status': sort['status'] = dir; break;
       case 'type': sort['meta.productType'] = dir; break;
       case 'date':
-      default: sort['createdAt'] = dir; break;
+      default:
+        // Date de commande uniquement: création Woo si dispo, sinon création interne
+        sort['meta.sourceCreatedAt'] = dir;
+        sort['createdAt'] = dir;
+        break;
     }
 
     const total = await Order.countDocuments(filter);
-    const orders = await Order.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    let orders;
+    if (sortKeyRaw === 'date') {
+      const pipeline = [
+        { $match: filter },
+        { $addFields: { effectiveDate: { $ifNull: ['$meta.sourceCreatedAt', '$createdAt'] } } },
+        { $sort: { effectiveDate: dir, _id: -1 } },
+        { $skip: skip },
+        { $limit: limit }
+      ];
+      orders = await Order.aggregate(pipeline);
+    } else {
+      orders = await Order.find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
 
     // Métriques simples pour l'en-tête
     const [missingRefCount, missingVinCount, awaitingShipCount] = await Promise.all([
@@ -2873,6 +3026,53 @@ app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, as
         order.events.push({ type: 'woo_update_failed', message: 'Mise à jour WooCommerce échouée', payloadSnippet: { id: order.providerOrderId, error: (errWoo && errWoo.message) ? errWoo.message : String(errWoo) } });
       }
     }
+    // Pousser aussi le tracking vers ParcelPanel (pour assurer la détection de livraison)
+    try {
+      const apiKeyPP = (process.env.PARCELPANEL_API_KEY || '').trim();
+      const ppCourier = (v) => {
+        const s = String(v || '').toLowerCase();
+        if (!s) return '';
+        if (s.includes('ups')) return 'ups';
+        if (s.includes('chronopost')) return 'chronopost-fr';
+        if (s.includes('colissimo') || s.includes('la poste') || s.includes('laposte')) return 'colissimo';
+        if (s.includes('dhl')) return 'dhl';
+        if (s.includes('dpd')) return 'dpd';
+        if (s.includes('gls')) return 'gls';
+        return '';
+      };
+      const ppDate = (d) => {
+        try {
+          const x = d instanceof Date ? d : new Date(d);
+          if (isNaN(x.getTime())) return undefined;
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())} ${pad(x.getHours())}:${pad(x.getMinutes())}:${pad(x.getSeconds())}`;
+        } catch { return undefined; }
+      };
+      if (apiKeyPP && order.provider === 'woocommerce' && order.providerOrderId && order?.shipping?.trackingNumber) {
+        const shipments = [ {
+          order_id: isNaN(Number(order.providerOrderId)) ? String(order.providerOrderId) : Number(order.providerOrderId),
+          tracking_number: order.shipping.trackingNumber,
+          ...(ppCourier(order.shipping.carrier) ? { courier_code: ppCourier(order.shipping.carrier) } : {}),
+          ...(order.shipping.shippedAt ? { date_shipped: ppDate(order.shipping.shippedAt) } : {}),
+          status_shipped: 1
+        } ];
+        try {
+          const r = await fetch('https://wp-api.parcelpanel.com/api/v1/tracking/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'PP-Api-Key': apiKeyPP },
+            body: JSON.stringify({ shipments })
+          });
+          const j = await r.json().catch(() => ({}));
+          if (r.ok) {
+            order.events.push({ type: 'parcelpanel_create', message: 'Tracking envoyé à ParcelPanel', payloadSnippet: { order_id: String(order.providerOrderId), trackingNumber: order.shipping.trackingNumber, result: (j && j.data && j.data.success_count) ? j.data.success_count : 0 } });
+          } else {
+            order.events.push({ type: 'parcelpanel_create_failed', message: `ParcelPanel create échoué (HTTP ${r.status})`, payloadSnippet: { order_id: String(order.providerOrderId), trackingNumber: order.shipping.trackingNumber, response: (j && (j.msg || j.message)) ? (j.msg || j.message) : '' } });
+          }
+        } catch (e2) {
+          order.events.push({ type: 'parcelpanel_create_failed', message: 'ParcelPanel create erreur', payloadSnippet: { error: e2 && e2.message ? e2.message : String(e2) } });
+        }
+      }
+    } catch (_) {}
     await order.save();
     return res.json({ success: true, order });
   } catch (e) {

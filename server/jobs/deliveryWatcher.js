@@ -1,4 +1,5 @@
 const Order = require('../models/order');
+const { getCarrierTrackingEvents } = require('../services/carrierTracking');
 
 let fetchFn = global.fetch;
 if (!fetchFn) {
@@ -96,17 +97,29 @@ async function runDeliveryScanOnce() {
   const apiKey = (process.env.PARCELPANEL_API_KEY || '').trim();
   if (!apiKey || !fetchFn) return { scanned: 0, delivered: 0 };
 
-  // Candidates: expédiées, Woo, tracking présent
+  // Normalisation préalable: toute commande avec tracking passe en "expédiée" si non finale
+  const finals = ['delivered_awaiting_deposit','deposit_received','cancelled','refunded','delivered'];
+  try {
+    await Order.updateMany(
+      {
+        'shipping.trackingNumber': { $exists: true, $ne: '' },
+        status: { $nin: finals }
+      },
+      { $set: { status: 'fulfilled' } }
+    );
+  } catch (_) {}
+
+  // Candidates: Woo, tracking présent, statut non final
   const candidates = await Order.find({
-    status: 'fulfilled',
     provider: 'woocommerce',
     providerOrderId: { $exists: true, $ne: '' },
-    'shipping.trackingNumber': { $exists: true, $ne: '' }
-  }, { providerOrderId: 1, 'shipping.trackingNumber': 1 }).lean();
+    'shipping.trackingNumber': { $exists: true, $ne: '' },
+    status: { $nin: finals }
+  }, { providerOrderId: 1, 'shipping.trackingNumber': 1, 'shipping.carrier': 1 }).lean();
 
   if (!candidates.length) return { scanned: 0, delivered: 0 };
 
-  const idToTracking = new Map(candidates.map(c => [String(c.providerOrderId), c.shipping?.trackingNumber || '']));
+  const idToInfo = new Map(candidates.map(c => [String(c.providerOrderId), { tracking: c.shipping?.trackingNumber || '', carrier: c.shipping?.carrier || '' }]));
   let scanned = 0;
   let delivered = 0;
 
@@ -117,17 +130,29 @@ async function runDeliveryScanOnce() {
       for (const item of details) {
         const orderId = String(item.order_id || item.number || '').trim();
         const shipments = Array.isArray(item.shipments) ? item.shipments : [];
-        const hasDelivered = shipments.some(isDeliveredFromPPShipment);
+        let hasDelivered = shipments.some(isDeliveredFromPPShipment);
+        let providerTag = 'parcelpanel';
+        const info = idToInfo.get(orderId) || { tracking: '', carrier: '' };
+        if (!hasDelivered && info.tracking) {
+          // Fallback AfterShip si ParcelPanel ne remonte rien
+          try {
+            const as = await getCarrierTrackingEvents({ carrier: info.carrier, trackingNumber: info.tracking });
+            if (as && Array.isArray(as.events)) {
+              hasDelivered = as.events.some(ev => String(ev.status || '').toLowerCase() === 'delivered');
+              if (hasDelivered) providerTag = as.provider || 'aftership';
+            }
+          } catch (_) {}
+        }
         if (hasDelivered) {
-          const trackingNumber = idToTracking.get(orderId) || '';
+          const trackingNumber = info.tracking || '';
           await Order.updateOne(
-            { provider: 'woocommerce', providerOrderId: orderId, status: { $nin: ['delivered_awaiting_deposit','deposit_received','cancelled','refunded','failed','delivered'] } },
+            { provider: 'woocommerce', providerOrderId: orderId, status: { $nin: ['delivered_awaiting_deposit','deposit_received','cancelled','refunded','delivered'] } },
             {
               $set: { status: 'delivered_awaiting_deposit' },
               $push: {
                 events: {
                   $each: [
-                    { type: 'order_delivered', message: 'Commande livrée (ParcelPanel)', at: new Date(), payloadSnippet: { provider: 'parcelpanel', trackingNumber } }
+                    { type: 'order_delivered', message: 'Commande livrée (auto)', at: new Date(), payloadSnippet: { provider: providerTag, trackingNumber } }
                   ]
                 }
               }
@@ -166,4 +191,4 @@ function startDeliveryWatcher() {
   console.log(`[deliveryWatcher] Démarré. Intervalle=${intervalMinutes} min`);
 }
 
-module.exports = { startDeliveryWatcher, runDeliveryReconciliationOnce };
+module.exports = { startDeliveryWatcher, runDeliveryReconciliationOnce, runDeliveryScanOnce };

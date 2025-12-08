@@ -4163,6 +4163,21 @@ async function checkAuth() {
         const exportBtn = document.getElementById('orders-export-btn');
         const tbody = document.getElementById('orders-list');
         const missingRefCbx = document.getElementById('orders-missing-techref');
+        try {
+            if (localStorage.getItem('ordersSortMigratedV1') !== '1') {
+                const cur = localStorage.getItem('ordersSort');
+                if (!cur || cur === 'date_asc') localStorage.setItem('ordersSort', 'date_desc');
+                localStorage.setItem('ordersSortMigratedV1', '1');
+            }
+            const savedSort = localStorage.getItem('ordersSort');
+            if (sortSel) {
+                if (savedSort && Array.from(sortSel.options).some(o => o.value === savedSort)) {
+                    sortSel.value = savedSort;
+                } else {
+                    sortSel.value = 'date_desc';
+                }
+            }
+        } catch(_) {}
 
         if (createBtn) createBtn.addEventListener('click', () => openCreateOrderModal());
         if (refreshBtn) refreshBtn.addEventListener('click', () => loadOrdersList(1));
@@ -4210,7 +4225,7 @@ async function checkAuth() {
         if (statusSel) statusSel.addEventListener('change', () => loadOrdersList(1));
         if (fromInput) fromInput.addEventListener('change', () => loadOrdersList(1));
         if (toInput) toInput.addEventListener('change', () => loadOrdersList(1));
-        if (sortSel) sortSel.addEventListener('change', () => loadOrdersList(1));
+        if (sortSel) sortSel.addEventListener('change', () => { try { localStorage.setItem('ordersSort', sortSel.value); } catch(_) {} loadOrdersList(1); });
         if (exportBtn) exportBtn.addEventListener('click', () => exportOrdersCsv());
         if (syncWooAllBtn) syncWooAllBtn.addEventListener('click', async () => {
             if (!authToken) return logout();
