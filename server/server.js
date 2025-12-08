@@ -1260,25 +1260,30 @@ async function syncWooRecentOrders() {
     const cs = (process.env.WOOCOMMERCE_CONSUMER_SECRET || '').trim();
     if (!base || !ck || !cs) return;
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const url = `${base.replace(/\/$/, '')}/wp-json/wc/v3/orders?after=${encodeURIComponent(since)}&per_page=100&orderby=date&order=desc`;
+    const baseClean = base.replace(/\/$/, '');
     const headers2 = { 'Authorization': `Basic ${base64(`${ck}:${cs}`)}`, 'Accept': 'application/json', 'User-Agent': 'CarPartsSAV/1.0' };
-    let resp = await fetch(url, { headers: headers2 });
-    if (!resp.ok) {
-      const url2 = `${base.replace(/\/$/, '')}/wp-json/wc/v3/orders?consumer_key=${encodeURIComponent(ck)}&consumer_secret=${encodeURIComponent(cs)}&after=${encodeURIComponent(since)}&per_page=100&orderby=date&order=desc`;
-      resp = await fetch(url2, { headers: { 'Accept': 'application/json', 'User-Agent': 'CarPartsSAV/1.0' } });
+    let page = 1;
+    const perPage = 100;
+    let processed = 0;
+    for (;;) {
+      const url = `${baseClean}/wp-json/wc/v3/orders?after=${encodeURIComponent(since)}&per_page=${perPage}&page=${page}&orderby=date&order=desc`;
+      let resp = await fetch(url, { headers: headers2 });
       if (!resp.ok) {
-        await new Promise(r => setTimeout(r, 1000));
+        const url2 = `${baseClean}/wp-json/wc/v3/orders?consumer_key=${encodeURIComponent(ck)}&consumer_secret=${encodeURIComponent(cs)}&after=${encodeURIComponent(since)}&per_page=${perPage}&page=${page}&orderby=date&order=desc`;
         resp = await fetch(url2, { headers: { 'Accept': 'application/json', 'User-Agent': 'CarPartsSAV/1.0' } });
+        if (!resp.ok) {
+          await new Promise(r => setTimeout(r, 1000));
+          resp = await fetch(url2, { headers: { 'Accept': 'application/json', 'User-Agent': 'CarPartsSAV/1.0' } });
+        }
       }
-    }
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => '');
-      console.warn('[orders-sync] Woo HTTP', resp.status, txt);
-      return;
-    }
-    const list = await resp.json().catch(() => []);
-    if (!Array.isArray(list) || list.length === 0) return;
-    for (const payload of list) {
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => '');
+        console.warn('[orders-sync] Woo HTTP', resp.status, txt);
+        break;
+      }
+      const list = await resp.json().catch(() => []);
+      if (!Array.isArray(list) || list.length === 0) break;
+      for (const payload of list) {
       const wooId = String(payload.id || payload.resource_id || '').trim();
       if (!wooId) continue;
       const internalStatus = mapWooStatusToInternal(payload.status);
@@ -1453,8 +1458,12 @@ async function syncWooRecentOrders() {
         ops2,
         { upsert: true }
       );
+      }
+      processed += list.length;
+      page += 1;
+      await new Promise(r => setTimeout(r, 300));
     }
-    console.log(`[orders-sync] Woo: ${list.length} commande(s) synchronisées`);
+    console.log(`[orders-sync] Woo: ${processed} commande(s) synchronisées`);
   } catch (e) {
     console.error('[orders-sync] Woo erreur', e && e.message ? e.message : e);
   }
@@ -2707,6 +2716,27 @@ app.post('/api/admin/orders/bulk-delete', authenticateAdmin, ensureAdmin, async 
   } catch (e) {
     console.error('[orders:bulk-delete] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/admin/orders/sync-now', adminAuthMW, ensureAdminOrAgent, async (req, res) => {
+  try {
+    await runOrdersSync();
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('[orders-sync] manual error', e && e.message ? e.message : e);
+    return res.status(500).json({ success: false, message: e && e.message ? e.message : 'Erreur serveur' });
+  }
+});
+
+app.post('/api/admin/orders/sync-woo-all', adminAuthMW, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const r = await syncWooAllOrders();
+    const processed = (r && typeof r.processed === 'number') ? r.processed : 0;
+    return res.json({ success: true, processed });
+  } catch (e) {
+    console.error('[orders-sync-full] manual error', e && e.message ? e.message : e);
+    return res.status(500).json({ success: false, message: e && e.message ? e.message : 'Erreur serveur' });
   }
 });
 
