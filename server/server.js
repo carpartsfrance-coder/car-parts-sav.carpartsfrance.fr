@@ -1098,17 +1098,47 @@ app.put('/api/admin/orders/:id', adminAuthMW, async (req, res) => {
       if (typeof raw === 'string') {
         const s = raw.trim();
         if (s) {
-          // Accepte 'YYYY-MM-DD' ou ISO
           const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00.000Z` : s;
           const d = new Date(iso);
           if (!isNaN(d.getTime())) {
             order.shipping.estimatedDeliveryAt = d;
             eventLog.push({ type: 'estimated_delivery_set', message: `Livraison estimée: ${d.toISOString().slice(0,10)}`, at: new Date() });
+            // Réarmer les indicateurs de retard si la date est modifiée
+            order.meta = order.meta || {};
+            order.meta.isOverdueEstimated = false;
+            order.meta.estimatedOverdueNotifiedAt = undefined;
+            if (body.notifyEstimatedEmail && order?.customer?.email) {
+              const to = String(order.customer.email || '').trim();
+              if (to) {
+                const pretty = d.toLocaleDateString('fr-FR');
+                const subject = `Mise à jour – Livraison estimée de votre commande ${order.number || ''}`;
+                const logoUrl = `${WEBSITE_URL.replace(/\/$/, '')}/assets/logo-v2.png`;
+                const html = `<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+                  <div style="background:#E30613;color:#ffffff;padding:16px 20px;display:flex;align-items:center;gap:12px;">
+                    <img src="${logoUrl}" alt="Car Parts France" style="height:36px;width:auto;display:block;"/>
+                    <div style="font-weight:700;font-size:16px;">Notification de livraison estimée</div>
+                  </div>
+                  <div style="padding:20px 20px 8px 20px;">
+                    <h2 style="margin:0 0 8px 0;color:#111827;font-size:18px;">Date de livraison estimée</h2>
+                    <p style="margin:8px 0;color:#1f2937;">Bonjour${order.customer?.name ? ` ${order.customer.name}` : ''},</p>
+                    <p style="margin:8px 0;color:#1f2937;">Votre commande${order.number ? ` <strong>${order.number}</strong>` : ''} est prévue pour une <strong>livraison estimée au ${pretty}</strong>.</p>
+                    <p style="margin:8px 0;color:#1f2937;">Nous vous tiendrons informé(e) en cas de changement.</p>
+                    <div style="margin-top:16px;padding:12px;border-left:4px solid #E30613;background:#fff5f5;color:#7f1d1d;border-radius:6px;">Conseil: surveillez votre boîte mail pour les mises à jour d’expédition et de suivi.</div>
+                  </div>
+                  <div style="padding:14px 20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;">Ce message est automatique, merci de ne pas y répondre directement.</div>
+                </div>`;
+                const text = `Votre commande${order.number ? ` ${order.number}` : ''} a une livraison estimée au ${pretty}.`;
+                try { await sendGenericEmail({ to, subject, html, text }); eventLog.push({ type: 'estimated_delivery_email_sent', at: new Date() }); } catch(_) {}
+              }
+            }
           }
         } else {
-          // Vide => suppression
           order.shipping.estimatedDeliveryAt = undefined;
           eventLog.push({ type: 'estimated_delivery_unset', message: 'Livraison estimée retirée', at: new Date() });
+          // Réinitialiser aussi les flags liés au retard
+          order.meta = order.meta || {};
+          order.meta.isOverdueEstimated = false;
+          order.meta.estimatedOverdueNotifiedAt = undefined;
         }
       }
     }
@@ -1928,6 +1958,7 @@ app.get('/api/track/order', async (req, res) => {
     ]);
     const filteredUpdates = updates.filter(ev => ALLOWED_EVENT_TYPES.has(String(ev.type || '').toLowerCase()));
 
+    try { res.set('Cache-Control', 'no-store, no-cache, must-revalidate'); } catch(_) {}
     res.json({
       success: true,
       order: {
@@ -2896,12 +2927,48 @@ app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, 
     if (missingTechRef) filter['meta.technicalRefRequired'] = true;
     if (q) {
       const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [
+      // Variante flexible pour VIN/plaque: autoriser des séparateurs entre caractères (ex: AB123CD vs AB-123-CD)
+      const qNorm = q.replace(/[^A-Za-z0-9]/g, '');
+      let reFlex = null;
+      if (qNorm && qNorm.length >= 3) {
+        const parts = qNorm.split('').map(ch => ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        reFlex = new RegExp(parts.join('[^A-Za-z0-9]*'), 'i');
+      }
+      const ors = [
         { number: re },
         { providerOrderId: re },
         { 'customer.name': re },
-        { 'customer.email': re }
+        { 'customer.email': re },
+        { 'customer.phone': re },
+        // VIN / Plaque
+        { 'meta.vinOrPlate': re },
+        // Produits
+        { 'items.name': re },
+        { 'items.sku': re },
+        // Adresses facturation
+        { 'billing.address.name': re },
+        { 'billing.address.company': re },
+        { 'billing.address.address1': re },
+        { 'billing.address.address2': re },
+        { 'billing.address.city': re },
+        { 'billing.address.postcode': re },
+        { 'billing.address.country': re },
+        // Adresses livraison
+        { 'shipping.address.name': re },
+        { 'shipping.address.company': re },
+        { 'shipping.address.address1': re },
+        { 'shipping.address.address2': re },
+        { 'shipping.address.city': re },
+        { 'shipping.address.postcode': re },
+        { 'shipping.address.country': re },
+        // Suivi et paiement
+        { 'shipping.trackingNumber': re },
+        { 'payment.molliePaymentId': re }
       ];
+      if (reFlex) {
+        ors.push({ 'meta.vinOrPlate': reFlex });
+      }
+      filter.$or = ors;
     }
     if (from || to) {
       const range = {};
@@ -2969,6 +3036,41 @@ app.get('/api/admin/orders', authenticateAdmin, ensureAdminOrAgent, async (req, 
   }
 });
 
+// Tableau expéditions (SAV) – synthèse des commandes à expédier
+app.get('/api/admin/orders/shipments', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const CANDIDATE_STATUSES = ['processing','paid','awaiting_transfer','awaiting_shipment','partially_fulfilled'];
+    const fields = {
+      number: 1, provider: 1, status: 1, customer: 1, totals: 1, meta: 1,
+      'shipping.trackingNumber': 1, 'shipping.carrier': 1, 'shipping.estimatedDeliveryAt': 1
+    };
+    const list = await Order.find({ status: { $in: CANDIDATE_STATUSES } }, fields).lean();
+    const shipments = list.map(o => ({
+      id: String(o._id),
+      number: o.number || '',
+      provider: o.provider || 'manual',
+      status: o.status || '',
+      customer: { name: o.customer?.name || '', email: o.customer?.email || '', phone: o.customer?.phone || '' },
+      totals: { amount: o.totals?.amount || 0, currency: o.totals?.currency || 'EUR' },
+      estimatedDeliveryAt: o.shipping?.estimatedDeliveryAt || null,
+      tracking: { hasTracking: !!(o.shipping && o.shipping.trackingNumber), number: o.shipping?.trackingNumber || '', carrier: o.shipping?.carrier || '' },
+      meta: { vinOrPlate: o.meta?.vinOrPlate || '' }
+    }));
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTomorrow = new Date(startOfToday); startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    const stats = {
+      dueToday: shipments.filter(s => s.estimatedDeliveryAt && new Date(s.estimatedDeliveryAt) >= startOfToday && new Date(s.estimatedDeliveryAt) < startOfTomorrow).length,
+      overdue: shipments.filter(s => s.estimatedDeliveryAt && new Date(s.estimatedDeliveryAt) < startOfToday).length,
+      withoutEstimatedDate: shipments.filter(s => !s.estimatedDeliveryAt).length
+    };
+    return res.json({ success: true, shipments, total: shipments.length, stats });
+  } catch (e) {
+    console.error('[orders:shipments] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Récupérer le détail d'une commande (pour l'édition/expédition)
 app.get('/api/admin/orders/:id', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
   try {
@@ -2981,6 +3083,41 @@ app.get('/api/admin/orders/:id', authenticateAdmin, ensureAdminOrAgent, async (r
     return res.json({ success: true, order });
   } catch (e) {
     console.error('[orders:get] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Tableau expéditions (SAV) – synthèse des commandes à expédier
+app.get('/api/admin/orders/shipments', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const CANDIDATE_STATUSES = ['processing','paid','awaiting_transfer','awaiting_shipment','partially_fulfilled'];
+    const fields = {
+      number: 1, provider: 1, status: 1, customer: 1, totals: 1, meta: 1,
+      'shipping.trackingNumber': 1, 'shipping.carrier': 1, 'shipping.estimatedDeliveryAt': 1
+    };
+    const list = await Order.find({ status: { $in: CANDIDATE_STATUSES } }, fields).lean();
+    const shipments = list.map(o => ({
+      id: String(o._id),
+      number: o.number || '',
+      provider: o.provider || 'manual',
+      status: o.status || '',
+      customer: { name: o.customer?.name || '', email: o.customer?.email || '', phone: o.customer?.phone || '' },
+      totals: { amount: o.totals?.amount || 0, currency: o.totals?.currency || 'EUR' },
+      estimatedDeliveryAt: o.shipping?.estimatedDeliveryAt || null,
+      tracking: { hasTracking: !!(o.shipping && o.shipping.trackingNumber), number: o.shipping?.trackingNumber || '', carrier: o.shipping?.carrier || '' },
+      meta: { vinOrPlate: o.meta?.vinOrPlate || '' }
+    }));
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTomorrow = new Date(startOfToday); startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    const stats = {
+      dueToday: shipments.filter(s => s.estimatedDeliveryAt && new Date(s.estimatedDeliveryAt) >= startOfToday && new Date(s.estimatedDeliveryAt) < startOfTomorrow).length,
+      overdue: shipments.filter(s => s.estimatedDeliveryAt && new Date(s.estimatedDeliveryAt) < startOfToday).length,
+      withoutEstimatedDate: shipments.filter(s => !s.estimatedDeliveryAt).length
+    };
+    return res.json({ success: true, shipments, total: shipments.length, stats });
+  } catch (e) {
+    console.error('[orders:shipments] erreur', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

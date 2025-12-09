@@ -72,7 +72,10 @@ const orderSchema = new mongoose.Schema({
     // Valeurs possibles: mecatronique_tcu, pont, boite_transfert, moteur, autres
     productType: { type: String, enum: ['mecatronique_tcu','pont','boite_transfert','moteur','autres'], default: 'autres', index: true },
     // Version de synchronisation pour protéger les champs saisis manuellement
-    syncVersion: { type: Number, default: 0 }
+    syncVersion: { type: Number, default: 0 },
+    // Retard sur date estimée
+    isOverdueEstimated: { type: Boolean, default: false },
+    estimatedOverdueNotifiedAt: { type: Date }
   },
   events: [orderEventSchema]
 }, { timestamps: true });

@@ -4154,6 +4154,7 @@ async function checkAuth() {
         const syncWooAllBtn = document.getElementById('orders-sync-woo-all-btn');
         const rebuildTechBtn = document.getElementById('orders-rebuild-techref-btn');
         const searchInput = document.getElementById('orders-search-input');
+        const searchClearBtn = document.getElementById('orders-search-clear');
         const providerSel = document.getElementById('orders-provider-filter');
         const statusSel = document.getElementById('orders-status-filter');
         const typeSel = document.getElementById('orders-type-filter');
@@ -4220,7 +4221,19 @@ async function checkAuth() {
                 syncBtn.innerHTML = '<i class="fas fa-cloud-download-alt"></i> Synchroniser (Woo+Mollie)';
             }
         });
-        if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadOrdersList(1); });
+        if (searchInput) {
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    loadOrdersList(1);
+                } else if (e.key === 'Escape') {
+                    searchInput.value = '';
+                    loadOrdersList(1);
+                }
+            });
+            // Mise à jour en temps réel avec un léger délai pour éviter les appels excessifs
+            try { searchInput.addEventListener('input', debounce(() => loadOrdersList(1), 300)); } catch(_) {}
+        }
+        if (searchClearBtn) searchClearBtn.addEventListener('click', () => { if (searchInput) searchInput.value = ''; loadOrdersList(1); });
         if (providerSel) providerSel.addEventListener('change', () => loadOrdersList(1));
         if (statusSel) statusSel.addEventListener('change', () => loadOrdersList(1));
         if (fromInput) fromInput.addEventListener('change', () => loadOrdersList(1));
@@ -4428,6 +4441,12 @@ async function checkAuth() {
                       <div class="row">
                         <input type="date" id="est-date" value="" />
                       </div>
+                      <div class="row" style="margin-top:6px;">
+                        <label style="font-size:12px; display:flex; align-items:center; gap:8px;">
+                          <input type="checkbox" id="est-send-email" checked />
+                          <span>Envoyer un email au client</span>
+                        </label>
+                      </div>
                       <div class="row">
                         <button class="qd qd-clear" data-est="clear">Effacer</button>
                         <button class="ok" data-est="ok">OK</button>
@@ -4474,17 +4493,19 @@ async function checkAuth() {
                     });
                     popover.querySelector('.ok').addEventListener('click', async () => {
                         const val = (input.value || '').trim();
-                        if (!val) { await updateEstimatedDelivery(id, ''); cleanup(); return; }
+                        const notify = !!(popover.querySelector('#est-send-email')?.checked);
+                        if (!val) { await updateEstimatedDelivery(id, '', notify); cleanup(); return; }
                         const iso = `${val}T00:00:00.000Z`;
-                        await updateEstimatedDelivery(id, iso);
+                        await updateEstimatedDelivery(id, iso, notify);
                         cleanup();
                     });
                     input.addEventListener('keydown', async (ev) => {
                         if (ev.key === 'Enter') {
                             const val = (input.value || '').trim();
-                            if (!val) { await updateEstimatedDelivery(id, ''); cleanup(); return; }
+                            const notify = !!(popover.querySelector('#est-send-email')?.checked);
+                            if (!val) { await updateEstimatedDelivery(id, '', notify); cleanup(); return; }
                             const iso = `${val}T00:00:00.000Z`;
-                            await updateEstimatedDelivery(id, iso);
+                            await updateEstimatedDelivery(id, iso, notify);
                             cleanup();
                         }
                     });
@@ -4647,6 +4668,7 @@ async function checkAuth() {
             btnShip.dataset.action = 'ship';
             btnShip.dataset.id = o._id;
             const shippingInfo = o.shipping || {};
+            const isOverdue = !!(o.meta && o.meta.isOverdueEstimated);
             btnShip.dataset.carrier = shippingInfo.carrier || '';
             btnShip.dataset.tracking = shippingInfo.trackingNumber || '';
             btnShip.dataset.shippedDate = shippingInfo.shippedAt ? new Date(shippingInfo.shippedAt).toISOString().slice(0, 10) : '';
@@ -4704,7 +4726,15 @@ async function checkAuth() {
             btnRef.dataset.required = techReq ? '1' : '0';
             const btnEst = document.createElement('button');
             btnEst.className = 'btn-secondary btn-icon';
-            btnEst.innerHTML = "<i class='fas fa-calendar-plus'></i>";
+            try {
+                const rawEst = (o && o.shipping && o.shipping.estimatedDeliveryAt) ? new Date(o.shipping.estimatedDeliveryAt) : null;
+                if (rawEst && !isNaN(rawEst.getTime())) {
+                    const estTxt = rawEst.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+                    btnEst.innerHTML = `<i class="fas fa-calendar-check"></i><span style="margin-left:6px;padding:2px 6px;border-radius:6px;background:#fde68a;color:#92400e;font-size:11px;font-weight:600;">${estTxt}</span>`;
+                } else {
+                    btnEst.innerHTML = "<i class='fas fa-calendar-plus'></i>";
+                }
+            } catch(_) { btnEst.innerHTML = "<i class='fas fa-calendar-plus'></i>"; }
             btnEst.dataset.action = 'est-mini';
             btnEst.dataset.id = o._id;
             const btnDel = document.createElement('button');
@@ -4752,6 +4782,12 @@ async function checkAuth() {
             tdActions.appendChild(actions);
             tr.classList.add('order-row');
             tr.dataset.id = o._id;
+            // Surbrillance jaune si commande en retard
+            try {
+                if (isOverdue) {
+                    tr.style.backgroundColor = '#fff8c5';
+                }
+            } catch(_) {}
             frag.appendChild(tr);
         });
         tbody.innerHTML = '';
@@ -5689,7 +5725,7 @@ async function checkAuth() {
         }
     }
 
-    async function updateEstimatedDelivery(orderId, isoOrEmpty) {
+    async function updateEstimatedDelivery(orderId, isoOrEmpty, notify) {
         if (!authToken) return logout();
         try {
             // normaliser: si ISO fourni, on n'envoie que YYYY-MM-DD pour simplifier
@@ -5701,12 +5737,14 @@ async function checkAuth() {
             const r = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, {
                 method: 'PUT',
                 headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ shipping: { estimatedDeliveryAt: payloadVal } })
+                body: JSON.stringify({ shipping: { estimatedDeliveryAt: payloadVal }, ...(notify ? { notifyEstimatedEmail: 1 } : {}) })
             });
             const d = await r.json().catch(() => ({}));
             if (!r.ok || !d.success) throw new Error(d.message || 'Échec mise à jour livraison estimée');
             showToast('Livraison estimée mise à jour', 'success');
             await loadOrdersList(1);
+            // Si le tableau expéditions est chargé, forcer aussi son rafraîchissement pour refléter la nouvelle date
+            try { if (typeof loadShipmentsData === 'function') loadShipmentsData(true); } catch(_) {}
         } catch (e) {
             showToast(e.message || 'Erreur', 'error');
         }
