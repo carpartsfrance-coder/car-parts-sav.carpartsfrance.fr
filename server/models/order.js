@@ -52,7 +52,25 @@ const orderSchema = new mongoose.Schema({
     carrier: String,
     trackingNumber: String,
     shippedAt: Date,
-    estimatedDeliveryAt: Date
+    estimatedDeliveryAt: Date,
+    // Historique de plusieurs expéditions (SAV, ré-envoi, etc.)
+    shipments: [{
+      carrier: String,
+      trackingNumber: String,
+      shippedAt: Date
+    }],
+    // Étiquettes de transport attachées à la commande
+    labels: [{
+      kind: { type: String, enum: ['label', 'document'], default: 'label' },
+      title: String,
+      purpose: { type: String, enum: ['first_shipment','reshipment','sav_return','other'], default: 'other' },
+      name: String,
+      url: String,
+      contentType: String,
+      size: Number,
+      uploadedAt: { type: Date, default: Date.now },
+      uploadedBy: String
+    }]
   },
   meta: {
     sourcePayloadHash: String,

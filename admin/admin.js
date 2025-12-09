@@ -239,6 +239,32 @@ function openEditOrderModal(orderId) {
                   </div>
                 </div>
               </section>
+              <section class="co-card" id="ed-shipments-card">
+                <header class="co-card-header"><i class="fas fa-box"></i><span>Historique des expéditions</span></header>
+                <div id="ed-shipments-list" class="co-field" style="gap:8px;"></div>
+                <div class="cpf-modal-actions__buttons" style="justify-content:flex-start;">
+                  <button id="ed-add-shipment" class="cpf-btn">Ajouter un envoi</button>
+                </div>
+              </section>
+              <section class="co-card" id="ed-labels-card">
+                <header class="co-card-header"><i class="fas fa-file-pdf"></i><span>Étiquettes de transport</span></header>
+                <div class="co-field" style="gap:8px;">
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                    <select id="ed-label-kind" style="height:36px;border:1px solid #d1d5db;border-radius:8px;padding:6px 10px;">
+                      <option value="label">Étiquette</option>
+                      <option value="document">Document</option>
+                    </select>
+                    <input id="ed-label-file" type="file" accept="application/pdf,image/*" multiple style="max-width:260px;" />
+                    <button id="ed-upload-label" class="cpf-btn">Joindre</button>
+                    <small style="color:#6b7280;">PDF ou image (max ~25 Mo)</small>
+                  </div>
+                  <div id="ed-label-dropzone" style="border:2px dashed #d1d5db;border-radius:10px;padding:16px;text-align:center;color:#6b7280;background:#fafafa;cursor:pointer;">
+                    Glissez-déposez plusieurs fichiers ici (PDF/Images) ou cliquez pour sélectionner
+                  </div>
+                  <div id="ed-labels-list" class="co-grid" style="grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px;"></div>
+                  <div id="ed-labels-error" class="co-error" style="display:none;"></div>
+                </div>
+              </section>
               <section class="co-card">
                 <header class="co-card-header"><i class="fas fa-car"></i><span>Références techniques & véhicule</span></header>
                 <div class="co-grid">
@@ -420,7 +446,242 @@ function openEditOrderModal(orderId) {
               ship.country.value = (o.shipping?.address?.country || '')
               setShipDisabledEd(false);
             }
+            // Rendu de l'historique des expéditions
+            try {
+              const listEl = modal.querySelector('#ed-shipments-list');
+              if (listEl) {
+                const shipments = Array.isArray(o?.shipping?.shipments) ? o.shipping.shipments : [];
+                if (!shipments.length && !o?.shipping?.trackingNumber) {
+                  listEl.innerHTML = '<div style="color:#6b7280;">Aucun envoi pour le moment.</div>';
+                } else {
+                  const all = shipments.length ? shipments : (o?.shipping?.trackingNumber ? [{ carrier: o.shipping.carrier || '', trackingNumber: o.shipping.trackingNumber || '', shippedAt: o.shipping.shippedAt || o.updatedAt }] : []);
+                  listEl.innerHTML = '<div class="co-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;"></div>';
+                  const grid = listEl.firstElementChild;
+                  all.forEach((s, idx) => {
+                    const dt = s.shippedAt ? new Date(s.shippedAt) : null;
+                    const when = dt && !isNaN(dt.getTime()) ? dt.toLocaleString('fr-FR') : '—';
+                    const card = document.createElement('div');
+                    card.className = 'co-card';
+                    card.style.padding = '12px';
+                    card.innerHTML = `
+                      <div style="font-weight:600;margin-bottom:6px;">Envoi ${idx+1}</div>
+                      <div><strong>Transporteur:</strong> ${escapeHtml(s.carrier || '')}</div>
+                      <div><strong>N° suivi:</strong> ${escapeHtml(s.trackingNumber || '')}</div>
+                      <div><strong>Expédié le:</strong> ${escapeHtml(when)}</div>
+                    `;
+                    grid.appendChild(card);
+                  });
+                }
+              }
+            } catch(_) {}
+            // Rendu des étiquettes de transport
+            try {
+              const labelsList = modal.querySelector('#ed-labels-list');
+              const lblErr = modal.querySelector('#ed-labels-error');
+              const fileInput = modal.querySelector('#ed-label-file');
+              const kindSel = modal.querySelector('#ed-label-kind');
+              const dropzone = modal.querySelector('#ed-label-dropzone');
+              function renderLabels(labels) {
+                if (!labelsList) return;
+                const arr = Array.isArray(labels) ? labels : [];
+                if (!arr.length) {
+                  labelsList.innerHTML = '<div style="color:#6b7280;">Aucune étiquette jointe.</div>';
+                  return;
+                }
+                labelsList.innerHTML = '';
+                arr.forEach((L, idx) => {
+                  const when = L.uploadedAt ? new Date(L.uploadedAt) : null;
+                  const pretty = when && !isNaN(when.getTime()) ? when.toLocaleString('fr-FR') : '';
+                  const card = document.createElement('div');
+                  card.className = 'co-card';
+                  card.style.padding = '14px';
+                  card.style.display = 'flex';
+                  card.style.flexDirection = 'column';
+                  card.style.gap = '6px';
+                  const typeLabel = L.kind ? (L.kind === 'label' ? 'Étiquette' : 'Document') : '—';
+                  const usageLabel = L.purpose ? (L.purpose==='first_shipment'?'Première expédition':(L.purpose==='reshipment'?'Réexpédition':(L.purpose==='sav_return'?'Retour SAV':'Autre'))) : '—';
+                  card.innerHTML = `
+                    <div style="font-weight:600;font-size:15px;">${esc(L.title || L.name || 'Étiquette')}</div>
+                    <div style="display:flex;flex-direction:column;gap:4px;color:#374151;font-size:13px;">
+                      <div><span style="color:#6b7280;">Type :</span> <strong>${esc(typeLabel)}</strong></div>
+                      <div><span style="color:#6b7280;">Usage :</span> <strong>${esc(usageLabel)}</strong></div>
+                      <div><span style="color:#6b7280;">Taille :</span> ${L.size ? Math.round(L.size/1024) + ' Ko' : '—'}</div>
+                      <div><span style="color:#6b7280;">Ajoutée le :</span> ${esc(pretty || '—')}</div>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+                      <a class="cpf-btn" href="${escAttr(L.url || '#')}" target="_blank" rel="noopener">Télécharger</a>
+                      <button class="cpf-btn" data-action="edit-label" data-idx="${idx}">Renommer/Classifier</button>
+                      <button class="cpf-btn cpf-btn-secondary" data-action="delete-label" data-idx="${idx}">Supprimer</button>
+                    </div>
+                  `;
+                  labelsList.appendChild(card);
+                });
+              }
+              renderLabels(o?.shipping?.labels);
+              // Upload handler
+              const uploadBtn = modal.querySelector('#ed-upload-label');
+              if (uploadBtn && fileInput) {
+                uploadBtn.addEventListener('click', async (ev) => {
+                  ev.preventDefault();
+                  lblErr.style.display = 'none'; lblErr.textContent = '';
+                  const files = (fileInput.files && fileInput.files.length) ? Array.from(fileInput.files) : [];
+                  if (!files.length) { lblErr.textContent = 'Veuillez sélectionner au moins un fichier.'; lblErr.style.display = 'block'; return; }
+                  try {
+                    const fd = new FormData();
+                    const kind = (kindSel?.value || 'label');
+                    fd.append('kind', kind);
+                    let url = `/api/admin/orders/${encodeURIComponent(orderId)}/labels`;
+                    if (files.length > 1) {
+                      files.forEach(f => fd.append('files', f));
+                      url = `/api/admin/orders/${encodeURIComponent(orderId)}/labels/bulk`;
+                    } else {
+                      fd.append('file', files[0]);
+                    }
+                    const r = await fetch(url, { method: 'POST', headers: { 'Authorization': `Basic ${token}` }, body: fd });
+                    const d2 = await r.json().catch(() => ({}));
+                    if (!r.ok || !d2.success) throw new Error(d2.message || 'Échec de l\'upload');
+                    fileInput.value = '';
+                    renderLabels(d2.labels || d2.added || []);
+                    try { showToast('Fichier(s) joint(s)', 'success'); } catch(_) {}
+                  } catch (e) {
+                    lblErr.textContent = e.message || 'Erreur lors de l\'upload';
+                    lblErr.style.display = 'block';
+                  }
+                });
+              }
+              // Drag & Drop handler
+              if (dropzone) {
+                const dz = dropzone;
+                const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
+                ['dragenter','dragover','dragleave','drop'].forEach(ev => dz.addEventListener(ev, prevent));
+                ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, () => { dz.style.borderColor = '#60a5fa'; dz.style.background = '#f0f9ff'; }));
+                ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, () => { dz.style.borderColor = '#d1d5db'; dz.style.background = '#fafafa'; }));
+                dz.addEventListener('click', () => { try { fileInput?.click(); } catch(_) {} });
+                dz.addEventListener('drop', async (e) => {
+                  try {
+                    lblErr.style.display = 'none'; lblErr.textContent = '';
+                    const dt = e.dataTransfer;
+                    const files = dt && dt.files ? Array.from(dt.files).filter(f => /pdf|image\//i.test(f.type)) : [];
+                    if (!files.length) return;
+                    const fd = new FormData();
+                    const kind = (kindSel?.value || 'label');
+                    fd.append('kind', kind);
+                    files.forEach(f => fd.append('files', f));
+                    const r = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/labels/bulk`, {
+                      method: 'POST', headers: { 'Authorization': `Basic ${token}` }, body: fd
+                    });
+                    const d2 = await r.json().catch(() => ({}));
+                    if (!r.ok || !d2.success) throw new Error(d2.message || 'Échec de l\'upload');
+                    renderLabels(d2.labels || d2.added || []);
+                    try { showToast(`${(d2.added || []).length || files.length} fichier(s) joints`, 'success'); } catch(_) {}
+                  } catch (e) {
+                    lblErr.textContent = e.message || 'Erreur lors de l\'upload';
+                    lblErr.style.display = 'block';
+                  }
+                });
+              }
+              // Suppression handler (délégation)
+              if (labelsList) {
+                labelsList.addEventListener('click', async (ev) => {
+                  const delBtn = ev.target.closest('button[data-action="delete-label"]');
+                  const editBtn = ev.target.closest('button[data-action="edit-label"]');
+                  if (delBtn) {
+                    ev.preventDefault();
+                    const idx = parseInt(delBtn.dataset.idx || '-1', 10);
+                    if (Number.isNaN(idx) || idx < 0) return;
+                    try {
+                      const r = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/labels/${idx}`, {
+                        method: 'DELETE', headers: { 'Authorization': `Basic ${token}` }
+                      });
+                      const d2 = await r.json().catch(() => ({}));
+                      if (!r.ok || !d2.success) throw new Error(d2.message || 'Suppression impossible');
+                      renderLabels(d2.labels || []);
+                      try { showToast('Étiquette supprimée', 'success'); } catch(_) {}
+                    } catch (e) {
+                      try { showToast(e.message || 'Erreur suppression', 'error'); } catch(_) {}
+                    }
+                    return;
+                  }
+                  if (editBtn) {
+                    ev.preventDefault();
+                    const idx = parseInt(editBtn.dataset.idx || '-1', 10);
+                    if (Number.isNaN(idx) || idx < 0) return;
+                    const current = (Array.isArray(o?.shipping?.labels) ? o.shipping.labels : [])[idx] || {};
+                    const newTitle = prompt('Titre (optionnel):', current.title || '');
+                    if (newTitle === null) return;
+                    // Choix usage en français -> mapping vers codes API
+                    const choice = prompt('Usage:\n1) Première expédition\n2) Réexpédition\n3) Retour SAV\n4) Autre', (current.purpose==='first_shipment'?'1':(current.purpose==='reshipment'?'2':(current.purpose==='sav_return'?'3':'4'))));
+                    let newPurpose = (current.purpose || 'other');
+                    if (choice !== null) {
+                      const c = String(choice || '').trim().toLowerCase();
+                      if (c === '1' || c.includes('premi')) newPurpose = 'first_shipment';
+                      else if (c === '2' || c.includes('réexp') || c.includes('reexp') || c.includes('ré exp') || c.includes('re exp')) newPurpose = 'reshipment';
+                      else if (c === '3' || c.includes('sav') || c.includes('retour')) newPurpose = 'sav_return';
+                      else if (c === '4' || c === '' || c.includes('autre')) newPurpose = 'other';
+                    }
+                    try {
+                      const r = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}/labels/${idx}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Basic ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: newTitle, purpose: newPurpose })
+                      });
+                      const d2 = await r.json().catch(() => ({}));
+                      if (!r.ok || !d2.success) throw new Error(d2.message || 'Mise à jour impossible');
+                      renderLabels(d2.labels || []);
+                      try { showToast('Mise à jour enregistrée', 'success'); } catch(_) {}
+                    } catch (e) {
+                      try { showToast(e.message || 'Erreur mise à jour', 'error'); } catch(_) {}
+                    }
+                  }
+                });
+              }
+            } catch(_) {}
           }).catch(() => {});
+
+        // Bouton "Ajouter un envoi" -> ouvre la modale d'expédition puis rafraîchit l'historique
+        try {
+          const addBtn = modal.querySelector('#ed-add-shipment');
+          if (addBtn) {
+            addBtn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              try { await openShipModal(orderId); } catch(_) {}
+              setTimeout(async () => {
+                try {
+                  const r = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, { headers: { 'Authorization': `Basic ${token}` } });
+                  const d2 = await r.json().catch(() => ({}));
+                  if (d2 && d2.success && d2.order) {
+                    const o2 = d2.order;
+                    const listEl = document.querySelector('#ed-shipments-list');
+                    if (listEl) {
+                      const shipments = Array.isArray(o2?.shipping?.shipments) ? o2.shipping.shipments : [];
+                      if (!shipments.length && !o2?.shipping?.trackingNumber) {
+                        listEl.innerHTML = '<div style="color:#6b7280;">Aucun envoi pour le moment.</div>';
+                      } else {
+                        const all = shipments.length ? shipments : (o2?.shipping?.trackingNumber ? [{ carrier: o2.shipping.carrier || '', trackingNumber: o2.shipping.trackingNumber || '', shippedAt: o2.shipping.shippedAt || o2.updatedAt }] : []);
+                        listEl.innerHTML = '<div class="co-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;"></div>';
+                        const grid = listEl.firstElementChild;
+                        all.forEach((s, idx) => {
+                          const dt = s.shippedAt ? new Date(s.shippedAt) : null;
+                          const when = dt && !isNaN(dt.getTime()) ? dt.toLocaleString('fr-FR') : '—';
+                          const card = document.createElement('div');
+                          card.className = 'co-card';
+                          card.style.padding = '12px';
+                          card.innerHTML = `
+                            <div style="font-weight:600;margin-bottom:6px;">Envoi ${idx+1}</div>
+                            <div><strong>Transporteur:</strong> ${escapeHtml(s.carrier || '')}</div>
+                            <div><strong>N° suivi:</strong> ${escapeHtml(s.trackingNumber || '')}</div>
+                            <div><strong>Expédié le:</strong> ${escapeHtml(when)}</div>
+                          `;
+                          grid.appendChild(card);
+                        });
+                      }
+                    }
+                  }
+                } catch(_) {}
+              }, 800);
+            });
+          }
+        } catch(_) {}
 
         if (shipSame) {
           shipSame.addEventListener('change', () => {
@@ -4724,6 +4985,384 @@ async function checkAuth() {
             btnRef.dataset.engine = engine;
             btnRef.dataset.tcu = tcu;
             btnRef.dataset.required = techReq ? '1' : '0';
+            // Bouton Joindre (avec menu type) + input caché
+            let currentKind = 'label';
+            let currentPurpose = 'first_shipment';
+            let currentTitle = '';
+            const labelInput = document.createElement('input');
+            labelInput.type = 'file';
+            labelInput.accept = 'application/pdf,image/*';
+            labelInput.multiple = true;
+            labelInput.style.display = 'none';
+            labelInput.addEventListener('change', async () => {
+                const files = (labelInput.files && labelInput.files.length) ? Array.from(labelInput.files) : [];
+                if (!files.length) return;
+                try {
+                    const fd = new FormData();
+                    fd.append('kind', currentKind || 'label');
+                    fd.append('purpose', currentPurpose || 'other');
+                    if (currentTitle && currentTitle.trim()) fd.append('title', currentTitle.trim());
+                    let url = `/api/admin/orders/${encodeURIComponent(o._id)}/labels`;
+                    if (files.length > 1) {
+                        files.forEach(f => fd.append('files', f));
+                        url = `/api/admin/orders/${encodeURIComponent(o._id)}/labels/bulk`;
+                    } else {
+                        fd.append('file', files[0]);
+                    }
+                    const r = await fetch(url, { method: 'POST', headers: { 'Authorization': `Basic ${authToken}` }, body: fd });
+                    const d2 = await r.json().catch(() => ({}));
+                    if (!r.ok || !d2.success) throw new Error(d2.message || 'Échec de l\'upload');
+                    // Rendre visible le bouton téléchargement si au moins 1 étiquette (kind==='label')
+                    try {
+                        const merged = d2.labels || d2.added || [];
+                        const has = Array.isArray(merged) && merged.some(x => (x && (x.kind || 'label') === 'label'));
+                        if (btnLabelDl) btnLabelDl.style.display = has ? '' : 'none';
+                        o.shipping = o.shipping || {}; o.shipping.labels = merged;
+                    } catch(_) {}
+                    try { showToast('Fichier(s) joint(s)', 'success'); } catch(_) {}
+                } catch (e) {
+                    try { showToast(e.message || 'Erreur lors de l\'upload', 'error'); } catch(_) {}
+                } finally {
+                    labelInput.value = '';
+                    currentTitle = '';
+                }
+            });
+            const btnLabelAdd = document.createElement('button');
+            btnLabelAdd.className = 'btn-secondary btn-icon';
+            btnLabelAdd.innerHTML = "<i class='fas fa-paperclip'></i>";
+            btnLabelAdd.title = 'Joindre une étiquette';
+            const menu = document.createElement('div');
+            menu.setAttribute('role', 'menu');
+            menu.style.position = 'fixed';
+            menu.style.zIndex = '10000';
+            menu.style.background = '#fff';
+            menu.style.border = '1px solid #e5e7eb';
+            menu.style.borderRadius = '8px';
+            menu.style.boxShadow = '0 10px 20px rgba(0,0,0,0.12)';
+            menu.style.padding = '12px';
+            menu.style.display = 'none';
+            menu.style.minWidth = '260px';
+            menu.style.maxWidth = '300px';
+            const menuContent = document.createElement('div');
+            menuContent.style.display = 'flex';
+            menuContent.style.flexDirection = 'column';
+            menuContent.style.gap = '8px';
+            const typeLabel = document.createElement('label');
+            typeLabel.textContent = 'Type';
+            typeLabel.style.fontSize = '12px';
+            typeLabel.style.color = '#6b7280';
+            const typeSelect = document.createElement('select');
+            typeSelect.style.height = '34px';
+            typeSelect.style.border = '1px solid #d1d5db';
+            typeSelect.style.borderRadius = '8px';
+            typeSelect.style.padding = '4px 8px';
+            typeSelect.innerHTML = `
+              <option value="label">Étiquette</option>
+              <option value="document">Document</option>
+            `;
+            typeSelect.value = currentKind;
+            typeSelect.addEventListener('change', () => {
+              currentKind = typeSelect.value || 'label';
+            });
+            const purposeLabel = document.createElement('label');
+            purposeLabel.textContent = 'Usage (étiquette)';
+            purposeLabel.style.fontSize = '12px';
+            purposeLabel.style.color = '#6b7280';
+            const purposeSelect = document.createElement('select');
+            purposeSelect.style.height = '34px';
+            purposeSelect.style.border = '1px solid #d1d5db';
+            purposeSelect.style.borderRadius = '8px';
+            purposeSelect.style.padding = '4px 8px';
+            purposeSelect.innerHTML = `
+              <option value="first_shipment">Première expédition</option>
+              <option value="reshipment">Réexpédition</option>
+              <option value="sav_return">Retour SAV</option>
+              <option value="other">Autre</option>
+            `;
+            purposeSelect.value = currentPurpose;
+            purposeSelect.addEventListener('change', () => {
+              currentPurpose = purposeSelect.value || 'other';
+            });
+            const titleLabel = document.createElement('label');
+            titleLabel.textContent = 'Titre (optionnel)';
+            titleLabel.style.fontSize = '12px';
+            titleLabel.style.color = '#6b7280';
+            const titleInput = document.createElement('input');
+            titleInput.type = 'text';
+            titleInput.placeholder = 'Ex: Retour DHL';
+            titleInput.style.height = '34px';
+            titleInput.style.border = '1px solid #d1d5db';
+            titleInput.style.borderRadius = '8px';
+            titleInput.style.padding = '4px 8px';
+            titleInput.addEventListener('input', () => {
+              currentTitle = titleInput.value || '';
+            });
+            const chooseBtn = document.createElement('button');
+            chooseBtn.className = 'cpf-btn';
+            chooseBtn.textContent = 'Choisir le(s) fichier(s)';
+            chooseBtn.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              currentKind = typeSelect.value || 'label';
+              currentPurpose = purposeSelect.value || 'other';
+              currentTitle = titleInput.value || '';
+              hideMenu();
+              try { labelInput.click(); } catch(_) {}
+            });
+            menuContent.appendChild(typeLabel);
+            menuContent.appendChild(typeSelect);
+            menuContent.appendChild(purposeLabel);
+            menuContent.appendChild(purposeSelect);
+            menuContent.appendChild(titleLabel);
+            menuContent.appendChild(titleInput);
+            menuContent.appendChild(chooseBtn);
+            menu.appendChild(menuContent);
+            document.body.appendChild(menu);
+            let escListener = null;
+            let scrollListener = null;
+            let resizeListener = null;
+            const hideMenu = () => {
+              menu.style.display = 'none';
+              if (escListener) { document.removeEventListener('keydown', escListener, true); escListener = null; }
+              if (scrollListener) { window.removeEventListener('scroll', scrollListener, true); scrollListener = null; }
+              if (resizeListener) { window.removeEventListener('resize', resizeListener, true); resizeListener = null; }
+            };
+            const onDocClick = (ev) => { if (!menu.contains(ev.target) && ev.target !== btnLabelAdd) hideMenu(); };
+            menu.addEventListener('click', (ev) => {
+              const b = ev.target.closest('button[data-k]');
+              if (!b) return;
+              currentKind = b.getAttribute('data-k') || 'label';
+              hideMenu();
+              try { labelInput.click(); } catch(_) {}
+            });
+            btnLabelAdd.addEventListener('click', (e) => {
+              e.preventDefault(); e.stopPropagation();
+              const r = btnLabelAdd.getBoundingClientRect();
+              if (menu.style.display === 'none') {
+                // Afficher invisible pour mesurer
+                menu.style.visibility = 'hidden';
+                menu.style.display = 'block';
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const pad = 8;
+                const mw = Math.max(menu.offsetWidth || 220, 220);
+                const mh = menu.offsetHeight || 80;
+                let left = Math.round(r.left);
+                let top = Math.round(r.bottom + 6);
+                // Si dépasse à droite, aligner sur la droite du bouton
+                if (left + mw > vw - pad) left = Math.max(pad, Math.round(r.right - mw));
+                // Si dépasse en bas, afficher au-dessus
+                if (top + mh > vh - pad) top = Math.max(pad, Math.round(r.top - mh - 6));
+                // Clamps
+                left = Math.min(Math.max(left, pad), Math.max(vw - mw - pad, pad));
+                top = Math.min(Math.max(top, pad), Math.max(vh - mh - pad, pad));
+                menu.style.left = `${left}px`;
+                menu.style.top = `${top}px`;
+                menu.style.visibility = 'visible';
+                // Gestion Échap / scroll / resize
+                escListener = (ev) => { if (ev.key === 'Escape') hideMenu(); };
+                document.addEventListener('keydown', escListener, true);
+                scrollListener = () => hideMenu();
+                resizeListener = () => hideMenu();
+                window.addEventListener('scroll', scrollListener, true);
+                window.addEventListener('resize', resizeListener, true);
+                // Focus premier item
+                try { menu.querySelector('button[data-k]')?.focus(); } catch(_) {}
+              } else {
+                hideMenu();
+              }
+            });
+            document.addEventListener('click', onDocClick);
+            // Bouton Télécharger dernière étiquette
+            const btnLabelDl = document.createElement('button');
+            btnLabelDl.className = 'btn-secondary btn-icon';
+            btnLabelDl.innerHTML = "<i class='fas fa-download'></i>";
+            btnLabelDl.title = 'Télécharger la dernière étiquette';
+            // Visible uniquement si une étiquette (kind==='label') existe déjà
+            try {
+                const hasLabel = Array.isArray(o?.shipping?.labels) && o.shipping.labels.some(x => (x && (x.kind || 'label') === 'label'));
+                if (!hasLabel) btnLabelDl.style.display = 'none';
+            } catch(_) {}
+            // Menu de sélection pour téléchargement
+            const dlMenu = document.createElement('div');
+            dlMenu.setAttribute('role', 'menu');
+            dlMenu.style.position = 'fixed';
+            dlMenu.style.zIndex = '10000';
+            dlMenu.style.background = '#fff';
+            dlMenu.style.border = '1px solid #e5e7eb';
+            dlMenu.style.borderRadius = '8px';
+            dlMenu.style.boxShadow = '0 10px 20px rgba(0,0,0,0.12)';
+            dlMenu.style.padding = '6px';
+            dlMenu.style.display = 'none';
+            dlMenu.style.minWidth = '260px';
+            document.body.appendChild(dlMenu);
+            let dlEsc = null, dlScroll = null, dlResize = null;
+            const hideDlMenu = () => {
+              dlMenu.style.display = 'none';
+              if (dlEsc) { document.removeEventListener('keydown', dlEsc, true); dlEsc = null; }
+              if (dlScroll) { window.removeEventListener('scroll', dlScroll, true); dlScroll = null; }
+              if (dlResize) { window.removeEventListener('resize', dlResize, true); dlResize = null; }
+            };
+            const onDocClickDl = (ev) => { if (!dlMenu.contains(ev.target) && ev.target !== btnLabelDl) hideDlMenu(); };
+            document.addEventListener('click', onDocClickDl);
+            btnLabelDl.addEventListener('click', async (e) => {
+              e.preventDefault(); e.stopPropagation();
+              try {
+                // Récupérer la liste à jour
+                const r = await fetch(`/api/admin/orders/${encodeURIComponent(o._id)}/labels`, { headers: { 'Authorization': `Basic ${authToken}` } });
+                const j = await r.json().catch(() => ({}));
+                const list = (r.ok && j && Array.isArray(j.labels)) ? j.labels : (Array.isArray(o?.shipping?.labels) ? o.shipping.labels : []);
+                if (!Array.isArray(list) || list.length === 0) { try { showToast('Aucune pièce jointe', 'warning'); } catch(_) {} return; }
+
+                // Construire le menu
+                dlMenu.innerHTML = '';
+                const addHeader = (txt) => { const h = document.createElement('div'); h.style.fontSize='12px'; h.style.color='#6b7280'; h.style.padding='4px 8px'; h.textContent = txt; dlMenu.appendChild(h); };
+                const addItem = (label, url) => { const b = document.createElement('button'); b.setAttribute('role','menuitem'); b.className='btn-secondary'; b.style.display='block'; b.style.width='100%'; b.style.textAlign='left'; b.style.margin='4px 0'; b.textContent = label; b.addEventListener('click', () => { hideDlMenu(); if (url) window.open(url, '_blank'); }); dlMenu.appendChild(b); };
+                const labels = list.filter(x => (x && (x.kind || 'label') === 'label'));
+                const docs = list.filter(x => (x && x.kind === 'document'));
+                if (labels.length) {
+                  addHeader('Étiquettes');
+                  labels.forEach((L, idx) => {
+                    const base = (L.title || L.name || `Étiquette ${idx+1}`);
+                    const suffix = L.purpose ? ` · ${(L.purpose==='first_shipment'?'Première expédition':(L.purpose==='reshipment'?'Réexpédition':(L.purpose==='sav_return'?'Retour SAV':'Autre')))} ` : '';
+                    addItem(`${base}${suffix}`, L.url || '');
+                  });
+                }
+                if (docs.length) {
+                  addHeader('Documents');
+                  docs.forEach((D, idx) => {
+                    const base = (D.title || D.name || `Document ${idx+1}`);
+                    const suffix = D.purpose ? ` · ${(D.purpose==='first_shipment'?'Première expédition':(D.purpose==='reshipment'?'Réexpédition':(D.purpose==='sav_return'?'Retour SAV':'Autre')))} ` : '';
+                    addItem(`${base}${suffix}`, D.url || '');
+                  });
+                }
+                if (!labels.length && !docs.length) {
+                  addItem('Aucune pièce jointe', '');
+                }
+
+                // Positionner
+                const rbtn = btnLabelDl.getBoundingClientRect();
+                dlMenu.style.visibility = 'hidden';
+                dlMenu.style.display = 'block';
+                const vw = window.innerWidth; const vh = window.innerHeight; const pad = 8;
+                const mw = Math.max(dlMenu.offsetWidth || 260, 260);
+                const mh = dlMenu.offsetHeight || 100;
+                let left = Math.round(rbtn.left);
+                let top = Math.round(rbtn.bottom + 6);
+                if (left + mw > vw - pad) left = Math.max(pad, Math.round(rbtn.right - mw));
+                if (top + mh > vh - pad) top = Math.max(pad, Math.round(rbtn.top - mh - 6));
+                left = Math.min(Math.max(left, pad), Math.max(vw - mw - pad, pad));
+                top = Math.min(Math.max(top, pad), Math.max(vh - mh - pad, pad));
+                dlMenu.style.left = `${left}px`;
+                dlMenu.style.top = `${top}px`;
+                dlMenu.style.visibility = 'visible';
+                dlEsc = (ev) => { if (ev.key === 'Escape') hideDlMenu(); };
+                document.addEventListener('keydown', dlEsc, true);
+                dlScroll = () => hideDlMenu();
+                dlResize = () => hideDlMenu();
+                window.addEventListener('scroll', dlScroll, true);
+                window.addEventListener('resize', dlResize, true);
+                try { dlMenu.querySelector('[role="menuitem"]')?.focus(); } catch(_) {}
+              } catch { try { showToast('Téléchargement impossible', 'error'); } catch(_) {} }
+            });
+
+            // Bouton Renommer/Classifier (édition rapide)
+            const btnLabelManage = document.createElement('button');
+            btnLabelManage.className = 'btn-secondary btn-icon';
+            btnLabelManage.innerHTML = "<i class='fas fa-pen'></i>";
+            btnLabelManage.title = 'Renommer / Classifier';
+            try {
+                const hasAny = Array.isArray(o?.shipping?.labels) && o.shipping.labels.length > 0;
+                if (!hasAny) btnLabelManage.style.display = 'none';
+            } catch(_) {}
+            const manageMenu = document.createElement('div');
+            manageMenu.setAttribute('role', 'menu');
+            manageMenu.style.position = 'fixed';
+            manageMenu.style.zIndex = '10000';
+            manageMenu.style.background = '#fff';
+            manageMenu.style.border = '1px solid #e5e7eb';
+            manageMenu.style.borderRadius = '8px';
+            manageMenu.style.boxShadow = '0 10px 20px rgba(0,0,0,0.12)';
+            manageMenu.style.padding = '6px';
+            manageMenu.style.display = 'none';
+            manageMenu.style.minWidth = '280px';
+            document.body.appendChild(manageMenu);
+            let mgEsc=null, mgScroll=null, mgResize=null;
+            const hideManage = () => {
+              manageMenu.style.display = 'none';
+              if (mgEsc) { document.removeEventListener('keydown', mgEsc, true); mgEsc = null; }
+              if (mgScroll) { window.removeEventListener('scroll', mgScroll, true); mgScroll = null; }
+              if (mgResize) { window.removeEventListener('resize', mgResize, true); mgResize = null; }
+            };
+            const onDocClickManage = (ev) => { if (!manageMenu.contains(ev.target) && ev.target !== btnLabelManage) hideManage(); };
+            document.addEventListener('click', onDocClickManage);
+            btnLabelManage.addEventListener('click', async (e) => {
+              e.preventDefault(); e.stopPropagation();
+              try {
+                // Liste à jour
+                const r = await fetch(`/api/admin/orders/${encodeURIComponent(o._id)}/labels`, { headers: { 'Authorization': `Basic ${authToken}` } });
+                const j = await r.json().catch(() => ({}));
+                const list = (r.ok && j && Array.isArray(j.labels)) ? j.labels : (Array.isArray(o?.shipping?.labels) ? o.shipping.labels : []);
+                if (!Array.isArray(list) || !list.length) { try { showToast('Aucune pièce jointe', 'warning'); } catch(_) {} return; }
+                manageMenu.innerHTML = '';
+                const addHeader = (txt) => { const h = document.createElement('div'); h.style.fontSize='12px'; h.style.color='#6b7280'; h.style.padding='4px 8px'; h.textContent = txt; manageMenu.appendChild(h); };
+                const addItem = (idx, label) => { const b = document.createElement('button'); b.setAttribute('role','menuitem'); b.className='btn-secondary'; b.style.display='block'; b.style.width='100%'; b.style.textAlign='left'; b.style.margin='4px 0'; b.textContent = label; b.addEventListener('click', async () => {
+                    hideManage();
+                    const cur = list[idx] || {};
+                    const newTitle = prompt('Titre (optionnel):', cur.title || '');
+                    if (newTitle === null) return;
+                    const newPurpose = prompt('Usage (first_shipment, reshipment, sav_return, other):', cur.purpose || 'other');
+                    try {
+                      const r2 = await fetch(`/api/admin/orders/${encodeURIComponent(o._id)}/labels/${idx}`, { method:'PUT', headers:{ 'Authorization': `Basic ${authToken}`, 'Content-Type':'application/json' }, body: JSON.stringify({ title: newTitle, purpose: newPurpose }) });
+                      const d2 = await r2.json().catch(() => ({}));
+                      if (!r2.ok || !d2.success) throw new Error(d2.message || 'Mise à jour impossible');
+                      o.shipping = o.shipping || {}; o.shipping.labels = d2.labels || [];
+                      try { showToast('Mise à jour enregistrée', 'success'); } catch(_) {}
+                    } catch (err) {
+                      try { showToast(err.message || 'Erreur mise à jour', 'error'); } catch(_) {}
+                    }
+                  }); manageMenu.appendChild(b); };
+                const labels = list.filter(x => (x && (x.kind || 'label') === 'label')).map((v,i,arr)=>({v,i: list.indexOf(v)}));
+                const docs = list.filter(x => (x && x.kind === 'document')).map((v,i,arr)=>({v,i: list.indexOf(v)}));
+                if (labels.length) {
+                  addHeader('Étiquettes');
+                  labels.forEach(({v,i}, idxLocal) => {
+                    const base = (v.title || v.name || `Étiquette ${idxLocal+1}`);
+                    const suffix = v.purpose ? ` · ${v.purpose}` : '';
+                    addItem(i, `${base}${suffix}`);
+                  });
+                }
+                if (docs.length) {
+                  addHeader('Documents');
+                  docs.forEach(({v,i}, idxLocal) => {
+                    const base = (v.title || v.name || `Document ${idxLocal+1}`);
+                    const suffix = v.purpose ? ` · ${v.purpose}` : '';
+                    addItem(i, `${base}${suffix}`);
+                  });
+                }
+                // Position
+                const rbtn = btnLabelManage.getBoundingClientRect();
+                manageMenu.style.visibility = 'hidden';
+                manageMenu.style.display = 'block';
+                const vw = window.innerWidth, vh = window.innerHeight, pad = 8;
+                const mw = Math.max(manageMenu.offsetWidth || 280, 280);
+                const mh = manageMenu.offsetHeight || 120;
+                let left = Math.round(rbtn.left);
+                let top = Math.round(rbtn.bottom + 6);
+                if (left + mw > vw - pad) left = Math.max(pad, Math.round(rbtn.right - mw));
+                if (top + mh > vh - pad) top = Math.max(pad, Math.round(rbtn.top - mh - 6));
+                left = Math.min(Math.max(left, pad), Math.max(vw - mw - pad, pad));
+                top = Math.min(Math.max(top, pad), Math.max(vh - mh - pad, pad));
+                manageMenu.style.left = `${left}px`;
+                manageMenu.style.top = `${top}px`;
+                manageMenu.style.visibility = 'visible';
+                mgEsc = (ev) => { if (ev.key === 'Escape') hideManage(); };
+                document.addEventListener('keydown', mgEsc, true);
+                mgScroll = () => hideManage();
+                mgResize = () => hideManage();
+                window.addEventListener('scroll', mgScroll, true);
+                window.addEventListener('resize', mgResize, true);
+              } catch {}
+            });
             const btnEst = document.createElement('button');
             btnEst.className = 'btn-secondary btn-icon';
             try {
@@ -4761,6 +5400,9 @@ async function checkAuth() {
             actions.appendChild(btnShip);
             if (dot) actions.appendChild(dot);
             actions.appendChild(btnRef);
+            actions.appendChild(btnLabelAdd);
+            actions.appendChild(btnLabelDl);
+            actions.appendChild(labelInput);
             actions.appendChild(btnEst);
             actions.appendChild(btnEdit);
             actions.appendChild(btnDel);
@@ -6274,6 +6916,35 @@ async function checkAuth() {
                                     <div class="od-field"><div class="od-label">Adresse</div><div class="od-value od-value--multiline">${addressBlock(shipping) || '—'}</div></div>
                                 </div>
                                 ${shipmentGrid}
+                            </div>
+                        </section>
+
+                        <section class="od-section">
+                            <div class="od-section__header"><h3 class="od-section__title"><i class="fas fa-file-pdf"></i>Étiquettes de transport</h3></div>
+                            <div class="od-card od-card--flat">
+                                ${(() => {
+                                    const labels = Array.isArray(order.shipping?.labels) ? order.shipping.labels : [];
+                                    if (!labels.length) return '<div class="od-empty"><i class="fas fa-file"></i>Aucune étiquette jointe</div>';
+                                    return `
+                                      <div class="od-list">
+                                        ${labels.map((L, idx) => {
+                                          const when = L?.uploadedAt ? formatDateTime(L.uploadedAt) : '—';
+                                          const size = L?.size ? `${Math.round(Number(L.size)/1024)} Ko` : '—';
+                                          const name = esc(L?.name || `Étiquette ${idx+1}`);
+                                          const url = escAttr(L?.url || '#');
+                                          return `
+                                            <div class="od-list__item">
+                                              <div class="od-list__main">
+                                                <div class="od-list__title">${name}</div>
+                                                <div class="od-list__meta">${size} · ${esc(when)}</div>
+                                              </div>
+                                              <div class="od-list__actions">
+                                                <a class="btn-secondary" href="${url}" target="_blank" rel="noopener"><i class="fas fa-download"></i> Télécharger</a>
+                                              </div>
+                                            </div>`;
+                                        }).join('')}
+                                      </div>`;
+                                })()}
                             </div>
                         </section>
 

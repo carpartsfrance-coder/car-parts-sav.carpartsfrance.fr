@@ -84,6 +84,11 @@ const { startDeliveryWatcher, runDeliveryReconciliationOnce, runDeliveryScanOnce
 require('dotenv').config();
 const { isS3Enabled, uploadBuffer, streamToResponse } = require('./services/storage');
 const { getCarrierTrackingEvents, getCarrierPublicLink } = require('./services/carrierTracking');
+// Dépendances facultatives pour marquer les étiquettes (PDF/images) avec le n° de commande
+let PDFDocument, StandardFonts, rgb;
+try { ({ PDFDocument, StandardFonts, rgb } = require('pdf-lib')); } catch (_) { /* optionnel */ }
+let sharp;
+try { sharp = require('sharp'); } catch (_) { /* optionnel */ }
 
 module.exports.rebuildTechnicalRefsInternal = rebuildTechnicalRefsInternal;
 
@@ -153,6 +158,157 @@ app.put('/api/admin/tasks/templates/:id', authenticateAdmin, ensureAdminOrAgent,
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
+
+// Mettre à jour les métadonnées d'une étiquette (title/purpose)
+app.put('/api/admin/orders/:id/labels/:idx', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const idx = parseInt(String(req.params.idx || ''), 10);
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) return res.status(400).json({ success: false, message: 'ID invalide' });
+    if (Number.isNaN(idx) || idx < 0) return res.status(400).json({ success: false, message: 'Index invalide' });
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const labels = Array.isArray(order?.shipping?.labels) ? order.shipping.labels : [];
+    if (idx >= labels.length) return res.status(404).json({ success: false, message: 'Étiquette introuvable' });
+    const b = req.body || {};
+    const next = labels[idx] || {};
+    if (b.title !== undefined) next.title = String(b.title || '').trim();
+    if (b.purpose !== undefined) {
+      const pv = String(b.purpose || '').toLowerCase();
+      if (['first_shipment','reshipment','sav_return','other'].includes(pv)) next.purpose = pv;
+    }
+    labels[idx] = next;
+    order.shipping.labels = labels;
+    order.events = Array.isArray(order.events) ? order.events : [];
+    order.events.push({ type: 'label_updated', at: new Date(), message: 'Étiquette mise à jour', payloadSnippet: { idx, title: next.title, purpose: next.purpose } });
+    await order.save();
+    return res.json({ success: true, label: next, labels });
+  } catch (e) {
+    console.error('[orders:labels:update] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Multi-upload (drag&drop): POST /api/admin/orders/:id/labels/bulk
+app.post('/api/admin/orders/:id/labels/bulk', authenticateAdmin, ensureAdminOrAgent, upload.array('files', 20), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) return res.status(400).json({ success: false, message: 'ID invalide' });
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) return res.status(400).json({ success: false, message: 'Aucun fichier reçu' });
+    const kind = ['label','document'].includes(String(req.body?.kind || '').toLowerCase()) ? String(req.body.kind).toLowerCase() : 'label';
+    const purpose = ['first_shipment','reshipment','sav_return','other'].includes(String(req.body?.purpose || '').toLowerCase()) ? String(req.body.purpose).toLowerCase() : 'other';
+    const title = String(req.body?.title || '').trim();
+
+    async function stampOrderNumber(buf, mime, orderNumber) {
+      try {
+        const text = `Commande ${orderNumber || ''}`.trim();
+        if (!text) return null;
+        if (/pdf/i.test(mime)) {
+          if (!PDFDocument) return null;
+          const pdf = await PDFDocument.load(buf);
+          const pages = pdf.getPages();
+          if (pages.length) {
+            const p = pages[0];
+            const { width, height } = p.getSize();
+            const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+            const fontSize = Math.max(12, Math.round(Math.min(width, height) * 0.02));
+            const padding = Math.round(fontSize * 0.6);
+            const textWidth = font.widthOfTextAtSize(text, fontSize);
+            const textHeight = font.heightAtSize(fontSize);
+            const boxW = textWidth + padding * 2;
+            const boxH = textHeight + padding * 0.8;
+            const x = Math.max(padding, width - boxW - padding);
+            const y = padding;
+            p.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1,1,1), opacity: 0.9 });
+            p.drawText(text, { x: x + padding, y: y + (boxH - textHeight) / 2, size: fontSize, font, color: rgb(0,0,0) });
+          }
+          const out = await pdf.save();
+          return Buffer.from(out);
+        }
+        if (/^image\//i.test(mime)) {
+          if (!sharp) return null;
+          const img = sharp(buf);
+          const meta = await img.metadata();
+          const margin = 12;
+          const baseWidth = meta.width || 600;
+          const overlayWidth = Math.min(Math.max(260, baseWidth - margin * 2), 1024);
+          const overlayHeight = Math.max(60, Math.round(overlayWidth * 0.18));
+          const textY = overlayHeight - 20;
+          const svg = `<?xml version="1.0" encoding="UTF-8"?>
+            <svg xmlns="http://www.w3.org/2000/svg" width="${overlayWidth}" height="${overlayHeight}">
+              <rect x="0" y="0" width="100%" height="100%" fill="white" fill-opacity="0.92"/>
+              <text x="20" y="${textY}" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(24, Math.round(overlayHeight * 0.45))}" fill="#111">${text.replace(/&/g,'&amp;')}</text>
+            </svg>`;
+          const overlay = Buffer.from(svg, 'utf8');
+          const top = Math.max(margin, (meta.height || (overlayHeight + margin * 2)) - overlayHeight - margin);
+          const composited = await img.composite([{ input: overlay, top, left: margin }]).toBuffer();
+          return composited;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    }
+
+    order.shipping = order.shipping || {};
+    if (!Array.isArray(order.shipping.labels)) order.shipping.labels = [];
+    const uploadedBy = (req.auth && (req.auth.email || req.auth.id)) ? String(req.auth.email || req.auth.id) : '';
+    const orderNumber = order.number || order.providerOrderId || (order._id?.toString?.().slice(-6));
+    const added = [];
+
+    for (const file of files) {
+      let publicUrl = '';
+      if (S3_ENABLED) {
+        let src = file.buffer;
+        const stamped = kind === 'label' ? await stampOrderNumber(src, file.mimetype || '', orderNumber) : null;
+        const data = stamped || src;
+        const original = String(file.originalname || 'fichier').replace(/[^A-Za-z0-9_.-]/g, '_');
+        const key = `labels/${id}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${original}`;
+        const ok = await uploadBuffer(key, file.mimetype || 'application/octet-stream', data);
+        if (!ok && ok !== undefined) throw new Error('Upload S3 échoué');
+        publicUrl = `/uploads/${encodeURIComponent(key)}`;
+      } else {
+        try {
+          if (kind === 'label') {
+            const originalBuf = await fs.promises.readFile(file.path);
+            const stamped = await stampOrderNumber(originalBuf, file.mimetype || '', orderNumber);
+            if (stamped) {
+              await fs.promises.writeFile(file.path, stamped);
+              file.size = stamped.length;
+            }
+          }
+        } catch {}
+        publicUrl = `/uploads/${encodeURIComponent(file.filename)}`;
+      }
+
+      const entry = {
+        kind,
+        title: title || undefined,
+        purpose,
+        name: String(file.originalname || 'fichier'),
+        url: publicUrl,
+        contentType: file.mimetype || 'application/octet-stream',
+        size: Number(file.size || 0),
+        uploadedAt: new Date(),
+        uploadedBy
+      };
+      order.shipping.labels.push(entry);
+      added.push(entry);
+    }
+
+    order.events = Array.isArray(order.events) ? order.events : [];
+    order.events.push({ type: 'labels_bulk_added', at: new Date(), message: `${added.length} fichier(s) ajoutés (${kind})`, payloadSnippet: { count: added.length, kind } });
+    await order.save();
+    return res.json({ success: true, added, labels: order.shipping.labels });
+  } catch (e) {
+    console.error('[orders:labels:bulk] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 
 // Liste des invitations (admin) avec recherche/tri/pagination
 app.get('/api/admin/reviews/invites', adminAuthMW, async (req, res) => {
@@ -2603,6 +2759,164 @@ const ensureAdminOrAgent = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs ou agents SAV' });
 };
 
+// === Étiquettes de transport (après auth middlewares) ===
+app.get('/api/admin/orders/:id/labels', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) return res.status(400).json({ success: false, message: 'ID invalide' });
+    const order = await Order.findById(id).lean();
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const labels = Array.isArray(order?.shipping?.labels) ? order.shipping.labels : [];
+    return res.json({ success: true, labels });
+  } catch (e) {
+    console.error('[orders:labels:list] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/admin/orders/:id/labels', authenticateAdmin, ensureAdminOrAgent, upload.single('file'), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) return res.status(400).json({ success: false, message: 'ID invalide' });
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const file = req.file;
+    if (!file) return res.status(400).json({ success: false, message: 'Aucun fichier reçu' });
+
+    // Option: tamponner le n° de commande sur l'étiquette (PDF/image) si possible
+    async function stampOrderNumber(buf, mime, orderNumber) {
+      try {
+        const text = `Commande ${orderNumber || ''}`.trim();
+        if (!text) return null;
+        if (/pdf/i.test(mime)) {
+          if (!PDFDocument) return null;
+          const pdf = await PDFDocument.load(buf);
+          const pages = pdf.getPages();
+          if (pages.length) {
+            const p = pages[0];
+            const { width, height } = p.getSize();
+            const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+            const fontSize = Math.max(12, Math.round(Math.min(width, height) * 0.02));
+            const padding = Math.round(fontSize * 0.6);
+            const textWidth = font.widthOfTextAtSize(text, fontSize);
+            const textHeight = font.heightAtSize(fontSize);
+            const boxW = textWidth + padding * 2;
+            const boxH = textHeight + padding * 0.8;
+            const x = Math.max(padding, width - boxW - padding);
+            const y = padding;
+            // Fond blanc semi-opaque
+            p.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1,1,1), opacity: 0.9 });
+            // Texte noir
+            p.drawText(text, { x: x + padding, y: y + (boxH - textHeight) / 2, size: fontSize, font, color: rgb(0,0,0) });
+          }
+          const out = await pdf.save();
+          return Buffer.from(out);
+        }
+        if (/^image\//i.test(mime)) {
+          if (!sharp) return null;
+          const img = sharp(buf);
+          const meta = await img.metadata();
+          const margin = 12;
+          const baseWidth = meta.width || 600;
+          const overlayWidth = Math.min(Math.max(260, baseWidth - margin * 2), 1024);
+          const overlayHeight = Math.max(60, Math.round(overlayWidth * 0.18));
+          const textY = overlayHeight - 20;
+          const svg = `<?xml version="1.0" encoding="UTF-8"?>
+            <svg xmlns="http://www.w3.org/2000/svg" width="${overlayWidth}" height="${overlayHeight}">
+              <rect x="0" y="0" width="100%" height="100%" fill="white" fill-opacity="0.92"/>
+              <text x="20" y="${textY}" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(24, Math.round(overlayHeight * 0.45))}" fill="#111">${text.replace(/&/g,'&amp;')}</text>
+            </svg>`;
+          const overlay = Buffer.from(svg, 'utf8');
+          const top = Math.max(margin, (meta.height || (overlayHeight + margin * 2)) - overlayHeight - margin);
+          const composited = await img.composite([{ input: overlay, top, left: margin }]).toBuffer();
+          return composited;
+        }
+      } catch (e) {
+        console.warn('[labels] Échec du marquage étiquette:', e?.message || e);
+        return null;
+      }
+      return null;
+    }
+
+    // Construire l'URL publique du fichier
+    let publicUrl = '';
+    const kind = ['label','document'].includes(String(req.body?.kind || '').toLowerCase()) ? String(req.body.kind).toLowerCase() : 'label';
+    const purpose = ['first_shipment','reshipment','sav_return','other'].includes(String(req.body?.purpose || '').toLowerCase()) ? String(req.body.purpose).toLowerCase() : 'other';
+    const title = String(req.body?.title || '').trim();
+    if (S3_ENABLED) {
+      // Marquer avant upload (si possible)
+      let src = file.buffer;
+      const orderNumber = order.number || order.providerOrderId || (order._id?.toString?.().slice(-6));
+      const stamped = kind === 'label' ? await stampOrderNumber(src, file.mimetype || '', orderNumber) : null;
+      const data = stamped || src;
+      const original = String(file.originalname || 'etiquette').replace(/[^A-Za-z0-9_.-]/g, '_');
+      const key = `labels/${id}/${Date.now()}-${original}`;
+      const ok = await uploadBuffer(key, file.mimetype || 'application/octet-stream', data);
+      if (!ok && ok !== undefined) throw new Error('Upload S3 échoué');
+      publicUrl = `/uploads/${encodeURIComponent(key)}`;
+    } else {
+      // Multer diskStorage a déjà écrit le fichier; on remplace le contenu si marquage possible
+      try {
+        const orderNumber = order.number || order.providerOrderId || (order._id?.toString?.().slice(-6));
+        const originalBuf = await fs.promises.readFile(file.path);
+        const stamped = kind === 'label' ? await stampOrderNumber(originalBuf, file.mimetype || '', orderNumber) : null;
+        if (stamped) {
+          await fs.promises.writeFile(file.path, stamped);
+          // Ajuster la taille déclarée
+          file.size = stamped.length;
+        }
+      } catch (e) {
+        console.warn('[labels] Remplacement local non effectué:', e?.message || e);
+      }
+      publicUrl = `/uploads/${encodeURIComponent(file.filename)}`;
+    }
+
+    order.shipping = order.shipping || {};
+    if (!Array.isArray(order.shipping.labels)) order.shipping.labels = [];
+    const uploadedBy = (req.auth && (req.auth.email || req.auth.id)) ? String(req.auth.email || req.auth.id) : '';
+    const entry = {
+      kind,
+      title: title || undefined,
+      purpose,
+      name: String(file.originalname || 'etiquette'),
+      url: publicUrl,
+      contentType: file.mimetype || 'application/octet-stream',
+      size: Number(file.size || 0),
+      uploadedAt: new Date(),
+      uploadedBy
+    };
+    order.shipping.labels.push(entry);
+    order.events = Array.isArray(order.events) ? order.events : [];
+    order.events.push({ type: 'label_added', at: new Date(), message: 'Étiquette de transport ajoutée', payloadSnippet: { name: entry.name, url: entry.url, size: entry.size } });
+    await order.save();
+    return res.json({ success: true, label: entry, labels: order.shipping.labels });
+  } catch (e) {
+    console.error('[orders:labels:upload] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+app.delete('/api/admin/orders/:id/labels/:idx', authenticateAdmin, ensureAdminOrAgent, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const idx = parseInt(String(req.params.idx || ''), 10);
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) return res.status(400).json({ success: false, message: 'ID invalide' });
+    if (Number.isNaN(idx) || idx < 0) return res.status(400).json({ success: false, message: 'Index invalide' });
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    const labels = Array.isArray(order?.shipping?.labels) ? order.shipping.labels : [];
+    if (idx >= labels.length) return res.status(404).json({ success: false, message: 'Étiquette introuvable' });
+    const removed = labels.splice(idx, 1)[0];
+    order.shipping.labels = labels;
+    order.events = Array.isArray(order.events) ? order.events : [];
+    order.events.push({ type: 'label_removed', at: new Date(), message: 'Étiquette supprimée', payloadSnippet: { name: removed?.name || '', url: removed?.url || '' } });
+    await order.save();
+    return res.json({ success: true, labels });
+  } catch (e) {
+    console.error('[orders:labels:delete] erreur', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 // Informations sur l'utilisateur authentifié
 app.get('/api/admin/me', authenticateAdmin, (req, res) => {
   try {
@@ -3133,16 +3447,36 @@ app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, as
     const shippedAtRaw = String(body.shippedAt || '').trim();
     if (!carrier || !trackingNumber) return res.status(400).json({ success: false, message: 'Transporteur et numéro de suivi requis' });
     order.shipping = order.shipping || {};
-    order.shipping.carrier = carrier;
-    order.shipping.trackingNumber = trackingNumber;
+    // Déterminer la date d'expédition
+    let shippedAt = undefined;
     if (shippedAtRaw) {
       const d = new Date(shippedAtRaw);
-      if (!isNaN(d.getTime())) order.shipping.shippedAt = d;
+      if (!isNaN(d.getTime())) shippedAt = d;
     }
-    if (!order.shipping.shippedAt) order.shipping.shippedAt = new Date();
+    if (!shippedAt) shippedAt = new Date();
+
+    // Empiler cet envoi dans l'historique des expéditions
+    try {
+      if (!Array.isArray(order.shipping.shipments)) order.shipping.shipments = [];
+      order.shipping.shipments.push({ carrier, trackingNumber, shippedAt });
+    } catch(_) {}
+
+    // Mettre à jour les champs "courants" de shipping avec le dernier envoi
+    order.shipping.carrier = carrier;
+    order.shipping.trackingNumber = trackingNumber;
+    order.shipping.shippedAt = shippedAt;
+
+    // Statut interne
     order.status = 'fulfilled';
+
+    // Réinitialiser les indicateurs de retard éventuels
+    order.meta = order.meta || {};
+    order.meta.isOverdueEstimated = false;
+
+    // Journaliser l'événement
     order.events = Array.isArray(order.events) ? order.events : [];
-    order.events.push({ type: 'order_shipped', message: 'Commande expédiée', payloadSnippet: { carrier: order.shipping.carrier || '', trackingNumber: order.shipping.trackingNumber || '' } });
+    const evtType = (order.shipping.shipments && order.shipping.shipments.length > 1) ? 'order_shipment_added' : 'order_shipped';
+    order.events.push({ type: evtType, message: 'Expédition enregistrée', at: new Date(), payloadSnippet: { carrier, trackingNumber, shippedAt } });
     // Pousser la mise à jour vers WooCommerce si applicable (ajout tracking + transporteur)
     if (order.provider === 'woocommerce' && order.providerOrderId) {
       try {
@@ -3210,6 +3544,35 @@ app.post('/api/admin/orders/:id/ship', authenticateAdmin, ensureAdminOrAgent, as
         }
       }
     } catch (_) {}
+    // Envoyer un email d'expédition au client (nouvel envoi = nouvel email)
+    try {
+      const to = String(order?.customer?.email || '').trim();
+      if (to) {
+        const prettyDate = shippedAt.toLocaleString('fr-FR');
+        const subject = `Votre commande ${order.number || ''} a été expédiée` + ((order.shipping.shipments?.length || 1) > 1 ? ' (nouvel envoi)' : '');
+        const logoUrl = `${WEBSITE_URL.replace(/\/$/, '')}/assets/logo-v2.png`;
+        const html = `<div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+          <div style="background:#E30613;color:#ffffff;padding:16px 20px;display:flex;align-items:center;gap:12px;">
+            <img src="${logoUrl}" alt="Car Parts France" style="height:36px;width:auto;display:block;"/>
+            <div style="font-weight:700;font-size:16px;">Confirmation d'expédition</div>
+          </div>
+          <div style="padding:20px 20px 8px 20px;">
+            <p style="margin:8px 0;color:#1f2937;">Bonjour${order.customer?.name ? ` ${order.customer.name}` : ''},</p>
+            <p style="margin:8px 0;color:#1f2937;">Nous vous confirmons l'expédition de votre commande${order.number ? ` <strong>${order.number}</strong>` : ''}.</p>
+            <ul style="margin:10px 0 0 16px;color:#1f2937;">
+              <li><strong>Transporteur:</strong> ${carrier}</li>
+              <li><strong>Numéro de suivi:</strong> ${trackingNumber}</li>
+              <li><strong>Date d'expédition:</strong> ${prettyDate}</li>
+            </ul>
+            <p style="margin:12px 0;color:#1f2937;">Un nouvel envoi peut apparaître en cas de SAV ou réexpédition partielle.</p>
+          </div>
+          <div style="padding:14px 20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;">Ce message est automatique, merci de ne pas y répondre directement.</div>
+        </div>`;
+        const text = `Votre commande${order.number ? ` ${order.number}` : ''} a été expédiée. Transporteur: ${carrier}. Suivi: ${trackingNumber}. Le ${prettyDate}.`;
+        try { await sendGenericEmail({ to, subject, html, text }); order.events.push({ type: 'shipment_email_sent', at: new Date() }); } catch(_) {}
+      }
+    } catch(_) {}
+
     await order.save();
     return res.json({ success: true, order });
   } catch (e) {
