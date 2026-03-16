@@ -2401,6 +2401,13 @@ select#per-page-select:focus-visible {
 .status-description {
     font-size: 14px;
     color: var(--text-color);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.additional-info {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .filter-actions {
@@ -4956,6 +4963,8 @@ select#per-page-select:focus-visible {
 }
 .bubble-content p {
   margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .bubble-content p + p { margin-top: 2px; }
 

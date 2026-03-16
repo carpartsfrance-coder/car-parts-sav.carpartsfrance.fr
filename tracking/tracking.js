@@ -130,6 +130,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return 'status-badge--secondary';
         }
     }
+
+    function normalizeTrackingMultilineText(value) {
+        return String(value ?? '')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/\r\n?/g, '\n');
+    }
     
     // Fonction pour rechercher un ticket
     async function searchTicket(ticketNumber) {
@@ -357,13 +363,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const statusDescription = document.createElement('div');
                 statusDescription.className = `status-description bubble-${author}`;
-                statusDescription.textContent = status.comment || 'Mise à jour du statut';
+                statusDescription.textContent = normalizeTrackingMultilineText(status.comment) || 'Mise à jour du statut';
                 
                 let additionalInfoEl = null;
                 if (status.additionalInfoRequested) {
                     additionalInfoEl = document.createElement('div');
                     additionalInfoEl.className = 'additional-info';
-                    additionalInfoEl.innerHTML = `<strong>Informations demandées:</strong> ${status.additionalInfoRequested}`;
+                    const additionalInfoLabel = document.createElement('strong');
+                    additionalInfoLabel.textContent = 'Informations demandées:';
+                    const additionalInfoText = document.createElement('span');
+                    additionalInfoText.className = 'multiline-text';
+                    additionalInfoText.textContent = normalizeTrackingMultilineText(status.additionalInfoRequested);
+                    additionalInfoEl.appendChild(additionalInfoLabel);
+                    additionalInfoEl.appendChild(document.createTextNode(' '));
+                    additionalInfoEl.appendChild(additionalInfoText);
                     
                     // Vérifier si cette demande d'information a déjà été fermée par l'utilisateur
                     let infoRequestAnswered = false;
@@ -391,24 +404,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     // N'afficher le message que s'il n'a pas été fermé précédemment
                     if (!isRequestClosed) {
-                        infoRequestMessage.innerHTML = `
-                            <div class="info-request-content">
-                                <strong>Le service SAV vous demande:</strong> ${status.additionalInfoRequested}
-                            </div>
-                            <button type="button" class="close-info-request" aria-label="Fermer" data-request-id="${infoRequestId}">
-                                <span aria-hidden="true">&times;</span>
-                            </button>
-                        `;
+                        infoRequestMessage.innerHTML = '';
+                        const infoRequestContent = document.createElement('div');
+                        infoRequestContent.className = 'info-request-content';
+                        const infoRequestLabel = document.createElement('strong');
+                        infoRequestLabel.textContent = 'Le service SAV vous demande:';
+                        const infoRequestText = document.createElement('span');
+                        infoRequestText.className = 'multiline-text';
+                        infoRequestText.textContent = normalizeTrackingMultilineText(status.additionalInfoRequested);
+                        infoRequestContent.appendChild(infoRequestLabel);
+                        infoRequestContent.appendChild(document.createTextNode(' '));
+                        infoRequestContent.appendChild(infoRequestText);
+
+                        const closeButton = document.createElement('button');
+                        closeButton.type = 'button';
+                        closeButton.className = 'close-info-request';
+                        closeButton.setAttribute('aria-label', 'Fermer');
+                        closeButton.setAttribute('data-request-id', infoRequestId);
+                        closeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
+
+                        infoRequestMessage.appendChild(infoRequestContent);
+                        infoRequestMessage.appendChild(closeButton);
                         infoRequestMessage.style.display = 'block';
                         
-                        // Ajouter un événement de clic pour fermer le message et le mémoriser
-                        const closeButton = infoRequestMessage.querySelector('.close-info-request');
                         if (closeButton) {
                             closeButton.addEventListener('click', function() {
-                                // Masquer le message
                                 infoRequestMessage.style.display = 'none';
-                                
-                                // Mémoriser que ce message a été fermé
                                 const requestId = this.getAttribute('data-request-id');
                                 const closedRequests = JSON.parse(localStorage.getItem('closedInfoRequests') || '{}');
                                 closedRequests[requestId] = true;
